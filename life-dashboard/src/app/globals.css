@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 20% 97%;
+  --foreground: 224 30% 12%;
+  --card: 0 0% 100%;
+  --muted: 220 16% 94%;
+  --muted-foreground: 221 12% 42%;
+  --border: 220 15% 89%;
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  --success: 152 60% 36%;
+  --warning: 32 92% 44%;
+  --danger: 0 72% 51%;
+}
+.dark {
+  --background: 226 24% 8%;
+  --foreground: 220 20% 94%;
+  --card: 226 22% 11%;
+  --muted: 226 18% 15%;
+  --muted-foreground: 220 12% 62%;
+  --border: 226 16% 19%;
+  --primary: 243 85% 70%;
+  --primary-foreground: 226 24% 8%;
+  --success: 152 55% 50%;
+  --warning: 36 92% 58%;
+  --danger: 0 80% 66%;
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-tap-highlight-color: transparent; }
+  body { @apply bg-background text-foreground antialiased; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-feature-settings: 'cv11', 'ss01'; }
+  :focus-visible { @apply outline-none ring-2 ring-primary/60 ring-offset-2 ring-offset-background; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
