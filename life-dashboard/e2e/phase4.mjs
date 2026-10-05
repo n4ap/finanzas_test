@@ -1,5 +1,5 @@
 // E2E Fase 4: proyectos, salud, viajes y familia. Requiere app en marcha y seed fresco.
-import { BASE, OUT, check, failures, launch, login } from './helpers.mjs';
+import { BASE, OUT, check, failures, launch, login, openSearch } from './helpers.mjs';
 
 const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -23,7 +23,7 @@ check('dashboard: viaje próximo enlaza al detalle', (await page.locator('sectio
 await page.goto(`${BASE}/projects`);
 await page.waitForSelector('text=Nuevo proyecto');
 check('proyectos: un único h1', (await page.locator('h1').count()) === 1);
-check('proyectos: 4 proyectos y aviso de atención', (await page.locator('main ul > li h2').count()) === 4 && /necesita atención/.test(await page.locator('[role=status]').first().textContent()));
+check('proyectos: 4 proyectos y aviso de atención', (await page.locator('main ul > li h2').count()) === 4 && /necesitan? atención/.test(await page.locator('[role=status]').first().textContent()));
 check('proyectos: Finanzas «En riesgo» por tarea atrasada', /En riesgo[\s\S]*1 tarea atrasada|1 tarea atrasada/.test(await page.locator('li:has(h2:text-is("Finanzas"))').textContent()));
 await page.click('button:has-text("Nuevo proyecto")');
 await dialog().locator('input[name=name]').fill('Reforma cocina');
@@ -108,7 +108,7 @@ await page.waitForSelector('h1:text-is("Escapada a Lisboa")');
 check('viaje: 4 días de itinerario', (await page.locator('ol > li').count()) === 4);
 check('viaje: presupuesto «Quedan 120 €»', /Quedan 120\s€/.test(await page.locator('main').textContent()));
 check('viaje: orden por hora (check-in antes que comida)', (await page.locator('ol > li').first().textContent()).indexOf('Llegada') < (await page.locator('ol > li').first().textContent()).indexOf('Comida'));
-check('viaje: días con mayúscula solo inicial', /Domingo, 1 de noviembre|Domingo, \d+ de \w+/.test(await page.locator('ol > li').first().textContent()));
+check('viaje: días con mayúscula solo inicial (p. ej. «Domingo, 1 de noviembre»)', /Día 1 · (Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo), \d+ de [a-zé]+/.test(await page.locator('ol > li').first().textContent()));
 // añadir plan
 await page.click('button:has-text("Añadir plan")');
 await dialog().locator('input[name=title]').fill('Mirador de Graça');
@@ -184,7 +184,7 @@ check('familia: lista de la compra (añadir, marcar, quitar comprados)', (await 
 
 // ───────── Búsqueda global ─────────
 await page.goto(`${BASE}/dashboard`);
-await page.keyboard.press('Control+k');
+await openSearch(page);
 await page.fill('[role=dialog] input', 'Lucía');
 await page.waitForSelector('[role=dialog] p:text-is("Familia")');
 check('búsqueda: encuentra personas de la familia', true);

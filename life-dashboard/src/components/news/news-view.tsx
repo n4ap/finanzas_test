@@ -1,4 +1,5 @@
 'use client';
+import { safeHttpUrl } from '@/lib/url';
 import { ExternalLink, Flame } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { Badge, EmptyState, Segmented } from '@/components/ui/primitives';
@@ -42,7 +43,7 @@ export function NewsView({ top, articles, followed }: { top: NewsDTO[]; articles
           <ol className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {top.map((n, i) => (
               <li key={n.id} className={cn('overflow-hidden rounded-2xl border bg-card', i === 0 && 'md:col-span-2 xl:col-span-1 xl:row-span-1')}>
-                <a href={n.url} target="_blank" rel="noopener noreferrer" className="flex h-full flex-col">
+                <a href={safeHttpUrl(n.url) ?? '#'} target="_blank" rel="noopener noreferrer" className="flex h-full flex-col">
                   <Thumb src={n.imageUrl} alt="" className="h-32 w-full" />
                   <div className="flex flex-1 flex-col gap-1.5 p-3">
                     <div className="flex items-center gap-2"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">{i + 1}</span><Badge>{categoryLabel(n.category)}</Badge></div>
@@ -73,7 +74,7 @@ export function NewsView({ top, articles, followed }: { top: NewsDTO[]; articles
             <ul className="divide-y overflow-hidden rounded-2xl border bg-card">
               {list.slice(0, shown).map((n) => (
                 <li key={n.id}>
-                  <a href={n.url} target="_blank" rel="noopener noreferrer" className="flex gap-3 p-3 hover:bg-muted/50">
+                  <a href={safeHttpUrl(n.url) ?? '#'} target="_blank" rel="noopener noreferrer" className="flex gap-3 p-3 hover:bg-muted/50">
                     <Thumb src={n.imageUrl} alt="" className="h-16 w-24 shrink-0 rounded-lg" />
                     <div className="min-w-0"><p className="line-clamp-2 text-sm font-medium">{n.title}</p><p className="line-clamp-2 text-xs text-muted-foreground">{n.shortSummary}</p><p className="mt-1 text-xs text-muted-foreground">{n.source} · {categoryLabel(n.category)} · {when(n.publishedAt)}</p></div>
                   </a>

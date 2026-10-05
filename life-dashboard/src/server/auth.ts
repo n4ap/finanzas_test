@@ -23,7 +23,8 @@ export async function createSession(userId: string) {
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    // Cookie «Secure» en producción; COOKIE_SECURE=false solo para probar por http en una red local (no en localhost, que ya funciona).
+    secure: process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false',
     path: '/',
     maxAge: SESSION_DAYS * 86_400,
   });

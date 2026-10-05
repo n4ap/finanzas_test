@@ -1,5 +1,6 @@
 // Prueba de humo end-to-end con Playwright (usa el Chromium preinstalado). Requiere la app en BASE_URL y el seed cargado.
 import { chromium } from 'playwright-core';
+import { openSearch } from './helpers.mjs';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3100';
 const OUT = process.env.SHOTS ?? '/tmp/claude-0/shots';
@@ -36,9 +37,8 @@ check('detecta tarea atrasada', (await page.locator('section[aria-label=Priorida
 await page.screenshot({ path: `${OUT}/desktop-light.png`, fullPage: true });
 
 // Búsqueda global Ctrl+K
-await page.keyboard.press('Control+k');
+await openSearch(page);
 await page.waitForSelector('[role=dialog][aria-label="Búsqueda global"]');
-await page.waitForSelector('[role=dialog] input:focus');
 await page.keyboard.type('contrato');
 await page.waitForSelector('text=Emails');
 check('Ctrl+K busca en emails agrupando resultados', (await page.textContent('[role=dialog]')).includes('Propuesta de contrato'));

@@ -1,5 +1,5 @@
 // E2E Fase 2: tareas, calendario, email y noticias. Requiere app en marcha y seed fresco (npm run db:reset).
-import { BASE, OUT, check, failures, launch, login } from './helpers.mjs';
+import { BASE, OUT, check, failures, launch, login, openSearch } from './helpers.mjs';
 
 const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -77,6 +77,11 @@ await page.goto(`${BASE}/calendar`);
 await page.waitForSelector('[role=tab][aria-selected=true]:has-text("Semana")');
 await page.click('button:has-text("Nuevo evento") >> nth=0');
 await page.fill('input[name=title]', 'Evento E2E');
+// Hora fija (00:30 de hoy, siempre el primero del día): la celda del mes solo enseña 3 eventos y con la hora por defecto (la próxima hora)
+// el evento quedaría tras «+N más» según la hora a la que se ejecute la prueba.
+const todayKey = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+await page.fill('input[name=startsAt]', `${todayKey}T00:30`);
+await page.fill('input[name=endsAt]', `${todayKey}T01:00`);
 await page.fill('input[name=location]', 'Sala E2E');
 await page.fill('input[name=attendees]', 'a@x.test, b@x.test');
 await page.click('button[type=submit]:has-text("Guardar")');
@@ -170,8 +175,7 @@ await page.goto(`${BASE}/dashboard`);
 check('dashboard refleja el nuevo ranking de noticias (≤5)', (await page.locator('section[aria-label="Lo importante de hoy"] li').count()) <= 5);
 
 // Búsqueda global sigue funcionando con datos nuevos
-await page.keyboard.press('Control+k');
-await page.waitForSelector('[role=dialog] input:focus');
+await openSearch(page);
 await page.keyboard.type('Pádel');
 await page.waitForSelector('[role=dialog] >> text=Eventos');
 check('búsqueda global encuentra eventos', true);

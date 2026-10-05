@@ -92,6 +92,8 @@ export interface AIMessageDTO {
   /** tool: a qué llamada responde. */
   toolCallId?: string;
   toolName?: string;
+  /** assistant: carga opaca del proveedor (p. ej. bloques de Claude con su razonamiento) que debe devolverse tal cual dentro del mismo turno. No se persiste. */
+  raw?: unknown;
 }
 
 /** Descripción de una herramienta para el proveedor (un LLM real la recibiría como JSON Schema). */
@@ -99,6 +101,8 @@ export interface AIToolInfo {
   name: string;
   description: string;
   kind: 'read' | 'write';
+  /** JSON Schema de los argumentos. */
+  inputSchema?: Record<string, unknown>;
 }
 
 /**
@@ -108,5 +112,5 @@ export interface AIToolInfo {
  */
 export interface AIProvider {
   readonly id: string;
-  respond(input: { ctx: AIContext; history: AIMessageDTO[]; tools: AIToolInfo[] }): Promise<{ content: string; toolCalls: AIToolCall[] }>;
+  respond(input: { ctx: AIContext; history: AIMessageDTO[]; tools: AIToolInfo[] }): Promise<{ content: string; toolCalls: AIToolCall[]; raw?: unknown }>;
 }

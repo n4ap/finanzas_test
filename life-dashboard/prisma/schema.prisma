@@ -66,7 +66,7 @@ model Session {
 
 /// Cuenta conectada de un proveedor externo (Google, Microsoft, ...). Tokens SIEMPRE cifrados (AES-256-GCM).
 model Account {
-  id              String     @id @default(cuid())
+  id              String        @id @default(cuid())
   userId          String
   provider        String // google | microsoft | news | csv | openai | anthropic | ollama ...
   kind            String // email | calendar | news | finance | ai
@@ -76,11 +76,14 @@ model Account {
   refreshTokenEnc String?
   scope           String?
   expiresAt       DateTime?
-  status          String     @default("connected") // connected | error | revoked
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          String        @default("connected") // connected | error | revoked
+  lastSyncAt      DateTime?
+  lastError       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   calendars       Calendar[]
+  articles        NewsArticle[]
 
   @@unique([userId, provider, kind, externalId])
 }
@@ -224,6 +227,7 @@ model Task {
 model NewsArticle {
   id          String   @id @default(cuid())
   userId      String
+  accountId   String? // feed del que procede (al desconectarlo se borran sus artículos)
   externalId  String?
   category    String // ia | tecnologia | economia | finanzas | deportes | espana | mundo
   title       String
@@ -236,6 +240,7 @@ model NewsArticle {
   publishedAt DateTime
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([userId, publishedAt])
 }
@@ -275,6 +280,7 @@ model Transaction {
   account     BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([userId, date])
+  @@index([accountId, date])
 }
 
 model Budget {

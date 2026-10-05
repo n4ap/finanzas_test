@@ -18,3 +18,12 @@ export async function login(page, email = 'demo@lifedashboard.dev', password = '
   await page.waitForURL('**/dashboard', { waitUntil: 'commit' });
   await page.waitForSelector('section[aria-label="Mi día"]');
 }
+
+/** Abre la búsqueda global (Ctrl+K). Si la página aún no ha hidratado la pulsación se pierde: se reintenta hasta que aparece el diálogo. */
+export async function openSearch(page) {
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press('Control+k');
+    try { await page.waitForSelector('[role=dialog] input:focus', { timeout: 1500 }); return; } catch { /* reintentar */ }
+  }
+  throw new Error('No se pudo abrir la búsqueda global con Ctrl+K');
+}

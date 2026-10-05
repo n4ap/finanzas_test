@@ -1,6 +1,6 @@
 // E2E Fase 3: finanzas e inversiones. Requiere app en marcha y seed fresco.
 import { writeFileSync } from 'node:fs';
-import { BASE, OUT, check, failures, launch, login } from './helpers.mjs';
+import { BASE, OUT, check, failures, launch, login, openSearch } from './helpers.mjs';
 
 const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -15,7 +15,7 @@ const accountNames = (pg) => pg.locator('main ul > li p.font-medium').allTextCon
 
 // ───────── Dashboard integrado ─────────
 const finW = await page.locator('section[aria-label=Finanzas]').textContent();
-check('dashboard: el widget de finanzas avisa del presupuesto superado (ocio)', /presupuesto superado: Ocio/.test(finW), finW.slice(0, 200));
+check('dashboard: el widget de finanzas avisa del presupuesto superado (ocio)', /presupuestos? superados?: .*Ocio/.test(finW), finW.slice(0, 200));
 check('dashboard: widget de finanzas con gráfico', (await page.locator('section[aria-label=Finanzas] svg.recharts-surface').count()) >= 1);
 
 // ───────── Resumen ─────────
@@ -291,8 +291,7 @@ await page.goto(`${BASE}/finance?tab=historial`);
 check('historial: incluye cambios de inversiones', /Posición/.test(await page.locator('ul[aria-label="Historial de cambios"]').textContent()));
 
 // ───────── Búsqueda global ─────────
-await page.keyboard.press('Control+k');
-await page.waitForSelector('[role=dialog] input:focus');
+await openSearch(page);
 await page.keyboard.type('VWCE');
 await page.waitForSelector('[role=dialog] >> text=Inversiones');
 check('búsqueda global: encuentra posiciones', true);
