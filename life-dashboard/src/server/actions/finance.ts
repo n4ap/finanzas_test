@@ -7,6 +7,7 @@ import { requireUser } from '../auth';
 import { ServiceError } from '../finance/core';
 import { addDividend, createInvestment, deleteDividend, deleteInvestment, updateInvestment, updatePrice } from '../finance/investments';
 import { createAccount, createTransaction, deleteAccount, deleteTransaction, importTransactions, previewDuplicates, run, setBudget, shareAccount, unshareAccount, updateAccount, updateTransaction } from '../finance/service';
+import { refreshPrices } from '../finance/quotes';
 import { fail, type ActionResult } from './result';
 
 const refresh = () => { revalidatePath('/finance'); revalidatePath('/investments'); revalidatePath('/dashboard'); };
@@ -97,4 +98,9 @@ export async function previewCsvAction(input: { accountId: string; text: string;
 
 export async function importTransactionsAction(input: unknown) {
   return exec((u) => importTransactions(u, input), { key: 'csv-import', max: 20, windowMs: 600_000 });
+}
+
+/** Pide los precios actuales al mercado (Yahoo Finance) para todas las posiciones del usuario. */
+export async function refreshPricesAction() {
+  return exec((u) => refreshPrices(u), { key: 'quotes', max: 6, windowMs: 60_000 });
 }

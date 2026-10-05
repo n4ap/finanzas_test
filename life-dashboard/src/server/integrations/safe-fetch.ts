@@ -6,7 +6,7 @@ import { isIP } from 'node:net';
 import { checkUserUrl, isPublicIp } from '@/lib/net-guard';
 import { ServiceError } from '../life/core';
 
-export interface SafeFetchOptions { maxBytes?: number; timeoutMs?: number; maxRedirects?: number; accept?: string }
+export interface SafeFetchOptions { maxBytes?: number; timeoutMs?: number; maxRedirects?: number; accept?: string; userAgent?: string }
 
 /**
  * ALLOW_PRIVATE_FETCH=1 desactiva la protección contra redes privadas. Solo para pruebas o para despliegues en una red de
@@ -25,19 +25,19 @@ const allowPrivate = () => {
  * y hay límites de tamaño, tiempo y número de redirecciones.
  */
 export async function safeFetchText(rawUrl: string, opts: SafeFetchOptions = {}): Promise<{ text: string; finalUrl: string }> {
-  const { maxBytes = 2_000_000, timeoutMs = 10_000, maxRedirects = 3, accept = '*/*' } = opts;
+  const { maxBytes = 2_000_000, timeoutMs = 10_000, maxRedirects = 3, accept = '*/*', userAgent = 'LifeDashboard/1.0 (+self-hosted)' } = opts;
   let current = rawUrl;
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const checked = checkUserUrl(current);
     if (!checked.ok) throw new ServiceError(checked.error);
-    const res = await once(checked.url, { maxBytes, timeoutMs, accept });
+    const res = await once(checked.url, { maxBytes, timeoutMs, accept, userAgent });
     if (res.redirect) { current = new URL(res.redirect, checked.url).toString(); continue; }
     return { text: res.text, finalUrl: checked.url.toString() };
   }
   throw new ServiceError('Demasiadas redirecciones');
 }
 
-function once(url: URL, o: { maxBytes: number; timeoutMs: number; accept: string }): Promise<{ text: string; redirect?: string }> {
+function once(url: URL, o: { maxBytes: number; timeoutMs: number; accept: string; userAgent: string }): Promise<{ text: string; redirect?: string }> {
   return new Promise((resolve, reject) => {
     // Node NO llama a `lookup` cuando el host ya es una IP literal: se valida aquí (URL normaliza 0x7f.1 / 2130706433 a 127.0.0.1).
     const literal = url.hostname.replace(/^\[|\]$/g, '');
@@ -57,7 +57,7 @@ function once(url: URL, o: { maxBytes: number; timeoutMs: number; accept: string
         return done(null, first.address, first.family);
       });
     }) as typeof dnsLookup;
-    const req = lib.request(url, { method: 'GET', lookup: guardedLookup, headers: { accept: o.accept, 'user-agent': 'LifeDashboard/1.0 (+self-hosted)' }, timeout: o.timeoutMs }, (res) => {
+    const req = lib.request(url, { method: 'GET', lookup: guardedLookup, headers: { accept: o.accept, 'user-agent': o.userAgent }, timeout: o.timeoutMs }, (res) => {
       const status = res.statusCode ?? 0;
       if (status >= 300 && status < 400 && res.headers.location) { res.resume(); return resolve({ text: '', redirect: res.headers.location }); }
       if (status < 200 || status >= 300) { res.resume(); return reject(new ServiceError(`El servidor respondió ${status}`)); }

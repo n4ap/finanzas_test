@@ -1,6 +1,9 @@
 'use client';
-import { Plus } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
+import { useRun } from '@/components/ui/use-run';
+import { refreshPricesAction } from '@/server/actions/finance';
+import type { RefreshResult } from '@/server/finance/quotes';
 import { ShareBar } from '@/components/charts/bars';
 import { ChartCard } from '@/components/charts/chart-card';
 import { ColumnsChart } from '@/components/charts/columns-chart';
@@ -19,9 +22,19 @@ const signed = (n: number) => `${n >= 0 ? '+' : '−'}${formatEUR(Math.abs(n))}`
 // Con el año abreviado: la serie abarca 12 meses y «6 oct» sería ambiguo.
 const dayLabel = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' }).replace(/\./g, '');
 
+function summary(r?: RefreshResult) {
+  if (!r) return null;
+  const ok = r.updated.length;
+  const bad = r.failed.length ? ` · Sin precio: ${r.failed.map((f) => `${f.symbol} (${f.reason})`).join('; ')}` : '';
+  return `${ok} ${ok === 1 ? 'posición actualizada' : 'posiciones actualizadas'}${bad}`;
+}
+
 export function InvestmentsView({ o }: { o: InvestmentsOverview }) {
   const [pos, setPos] = useState<{ open: boolean; position?: PositionDTO | null }>({ open: false });
   const [div, setDiv] = useState(false);
+  const quotes = useRun();
+  const [note, setNote] = useState<string | null>(null);
+  const refresh = () => quotes.run(refreshPricesAction, (r) => setNote(summary(r)));
   const { totals: t } = o;
   const up = t.pnl >= 0;
   const evolution = o.evolution.map((e) => ({ ...e, label: dayLabel(e.date) }));
@@ -32,9 +45,12 @@ export function InvestmentsView({ o }: { o: InvestmentsOverview }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-xl font-semibold">Inversiones</h1>
+        <Button variant="outline" onClick={refresh} disabled={quotes.pending || o.positions.length === 0}><RefreshCw size={16} className={quotes.pending ? 'animate-spin' : undefined} aria-hidden /> {quotes.pending ? 'Actualizando…' : 'Actualizar precios'}</Button>
         <Button variant="outline" onClick={() => setDiv(true)} disabled={o.positions.length === 0}>Registrar dividendo</Button>
         <Button onClick={() => setPos({ open: true })}><Plus size={16} /> Nueva posición</Button>
       </div>
+      {quotes.error && <p role="alert" className="text-sm text-danger">{quotes.error}</p>}
+      {note && !quotes.error && <p role="status" className="text-sm text-muted-foreground">{note}</p>}
 
       {o.positions.length === 0 ? <EmptyState title="Sin posiciones" hint="Añade tus acciones, ETFs, fondos o criptomonedas para ver rentabilidad, distribución y dividendos." /> : (
         <>
