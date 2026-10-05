@@ -12,7 +12,8 @@ describe('rangos de vista', () => {
   it('el mes cubre semanas completas', () => {
     const { from, to } = viewRange('month', d(15));
     expect(from.getDay()).toBe(1);
-    expect((to.getTime() - from.getTime()) / 86_400_000 % 7).toBe(0);
+    // Días naturales (redondeando): un mes con cambio de hora (DST) mide ±1 h en milisegundos.
+    expect(Math.round((to.getTime() - from.getTime()) / 86_400_000) % 7).toBe(0);
     expect(from <= new Date(2026, 9, 1) && to > new Date(2026, 9, 31)).toBe(true);
   });
   it('shiftDate mueve por unidad de vista', () => {
