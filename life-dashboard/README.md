@@ -4,12 +4,24 @@ Centro de control personal: Next.js 15 (App Router) · TypeScript estricto · Ta
 
 ## Arranque
 
+Requisitos: Node.js 20+ y PostgreSQL 16 (lo más fácil: Docker).
+
 ```bash
-cp .env.example .env          # y genera ENCRYPTION_KEY (ver comentario en el fichero)
+# 1) PostgreSQL con el usuario/base que espera .env.example (también crea la base de tests)
+docker run -d --name lifedash-pg -p 5432:5432 -e POSTGRES_USER=lifedash -e POSTGRES_PASSWORD=lifedash_dev -e POSTGRES_DB=lifedash postgres:16
+docker exec lifedash-pg psql -U lifedash -c "CREATE DATABASE lifedash_test"
+
+# 2) Configuración y dependencias
+cp .env.example .env          # genera una ENCRYPTION_KEY propia (ver el comentario del fichero)
 npm install
-npm run db:reset              # crea el esquema y carga datos demo
+
+# 3) Esquema + datos demo, y arrancar
+npm run db:reset              # CUIDADO: borra y recrea la base `lifedash`
 npm run dev                   # http://localhost:3000
 ```
+
+Sin Docker: instala PostgreSQL, crea el rol `lifedash` (contraseña `lifedash_dev`) y las bases `lifedash` y `lifedash_test`, o cambia `DATABASE_URL` en `.env`.
+Para uso diario (más rápido y como producción): `npm run build && npm start`.
 
 Usuario demo: `demo@lifedashboard.dev` / `demo-password-123`
 
