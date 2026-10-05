@@ -1,12 +1,12 @@
 'use client';
-import { Cake, Check, Plus, ShoppingBasket, Trash2, Users } from 'lucide-react';
+import { Cake, Check, ClipboardPaste, Plus, ShoppingBasket, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge, Button, Card, EmptyState, Field, Input, Select, Textarea } from '@/components/ui/primitives';
 import { useRun } from '@/components/ui/use-run';
 import { FAMILY_COLORS, RELATIONS, birthdayLabel } from '@/lib/family';
 import { cn } from '@/lib/utils';
-import { addShoppingAction, clearDoneShoppingAction, createMemberAction, deleteMemberAction, deleteShoppingAction, setShoppingDoneAction, updateMemberAction } from '@/server/actions/family';
+import { addShoppingAction, clearDoneShoppingAction, createMemberAction, deleteMemberAction, deleteShoppingAction, importShoppingAction, setShoppingDoneAction, updateMemberAction } from '@/server/actions/family';
 import type { FamilyData } from '@/server/life/queries';
 
 type Member = FamilyData['members'][number];
@@ -93,15 +93,32 @@ export function FamilyView({ d }: { d: FamilyData }) {
 function Shopping({ items }: { items: FamilyData['shopping'] }) {
   const { pending, error, run } = useRun();
   const [label, setLabel] = useState('');
+  const [paste, setPaste] = useState<{ open: boolean; text: string; note: string | null }>({ open: false, text: '', note: null });
   const done = items.filter((i) => i.done).length;
   return (
     <Card className="h-fit p-4">
-      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ShoppingBasket size={16} aria-hidden /> Lista de la compra</h2>
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><ShoppingBasket size={16} aria-hidden /> Lista de la compra<Button variant="ghost" size="sm" className="ml-auto h-7 gap-1 px-2 text-xs" onClick={() => setPaste({ open: true, text: '', note: null })}><ClipboardPaste size={14} aria-hidden /> Pegar lista</Button></h2>
       <form className="mb-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!label.trim()) return; run(() => addShoppingAction({ label }), () => setLabel('')); }}>
         <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Añadir…" maxLength={120} aria-label="Nuevo artículo" />
         <Button type="submit" size="icon" disabled={pending} aria-label="Añadir artículo"><Plus size={16} /></Button>
       </form>
       {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
+      <Dialog open={paste.open} onClose={() => setPaste((p) => ({ ...p, open: false }))} title="Pegar lista de la compra">
+        <form className="space-y-3" onSubmit={(e) => {
+          e.preventDefault();
+          run(() => importShoppingAction(paste.text), (r) => {
+            if (!r) return;
+            const extra = [r.duplicates ? `${r.duplicates} ya estaban` : '', r.overLimit ? `${r.overLimit} no caben (lista llena)` : ''].filter(Boolean).join(' · ');
+            setPaste({ open: true, text: '', note: `${r.added} ${r.added === 1 ? 'artículo añadido' : 'artículos añadidos'}${extra ? ` · ${extra}` : ''}` });
+          });
+        }}>
+          <p className="text-xs text-muted-foreground">Pega un artículo por línea: copia tu lista de Alexa (o de Notas, Keep, WhatsApp…) y pégala aquí. Los repetidos se saltan.</p>
+          <Textarea value={paste.text} onChange={(e) => setPaste((p) => ({ ...p, text: e.target.value, note: null }))} rows={8} aria-label="Artículos, uno por línea" placeholder={'Leche\nPan\nHuevos'} />
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+          {paste.note && <p role="status" className="text-sm text-muted-foreground">{paste.note}</p>}
+          <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setPaste((p) => ({ ...p, open: false }))}>Cerrar</Button><Button type="submit" disabled={pending || !paste.text.trim()}>Añadir a la lista</Button></div>
+        </form>
+      </Dialog>
       {items.length === 0 ? <p className="text-sm text-muted-foreground">Lista vacía.</p> : (
         <>
           <ul className="divide-y">

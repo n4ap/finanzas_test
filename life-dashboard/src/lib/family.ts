@@ -23,3 +23,30 @@ export const birthdayLabel = (days: number) => (days === 0 ? 'Hoy' : days === 1 
 
 export const FAMILY_COLORS = ['#ec4899', '#10b981', '#f59e0b', '#6366f1', '#0ea5e9', '#64748b'] as const;
 export const RELATIONS = ['Pareja', 'Madre', 'Padre', 'Hijo/a', 'Hermano/a', 'Abuelo/a', 'Sobrino/a', 'Amigo/a', 'Otro'] as const;
+
+const foldLabel = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+export const shoppingKey = foldLabel;
+
+/**
+ * Convierte texto pegado (p. ej. una lista compartida desde Alexa, Keep o Notas) en artículos:
+ * uno por línea, sin viñetas ni casillas, sin vacíos ni repetidos (sin distinguir mayúsculas ni tildes).
+ */
+export function parseShoppingText(text: string, max = 120): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const label = raw
+      .replace(/^\s*\[[ xX]?\]\s*/, '')
+      .replace(/^\s*(?:[-*•·▪◦‣⁃☐☑✓✔□■]+\s*|\d{1,3}[.)]\s+)/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, max)
+      .trim();
+    if (!label) continue;
+    const k = foldLabel(label);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(label);
+  }
+  return out;
+}

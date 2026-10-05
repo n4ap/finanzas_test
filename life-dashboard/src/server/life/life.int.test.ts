@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
-import { createMember, addShopping, clearDoneShopping, deleteMember, setShoppingDone, updateMember } from './family';
+import { createMember, addShopping, clearDoneShopping, deleteMember, importShopping, setShoppingDone, updateMember } from './family';
 import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, saveMetric, setGoal, updateWorkout } from './health';
 import { createProject, deleteProject, updateProject } from './projects';
 import { addBooking, addDefaultPacking, addItineraryItem, addPackingItem, createTrip, deleteBooking, deleteItineraryItem, deleteTrip, setPacked, updateBooking, updateItineraryItem, updateTrip } from './travel';
@@ -130,5 +130,25 @@ describe('familia', () => {
     expect(await clearDoneShopping(bob)).toBe(0);
     expect(await clearDoneShopping(alice)).toBe(1);
     expect(await db.shoppingItem.count()).toBe(1);
+  });
+});
+
+describe('importar lista de la compra', () => {
+  it('añade los nuevos, salta los que ya están y solo toca al propio usuario', async () => {
+    await addShopping(alice, { label: 'Leche' });
+    await addShopping(bob, { label: 'Pan' });
+    const r = await importShopping(alice, '- leche\n• Pan\n☐ Huevos\nHuevos');
+    expect(r).toEqual({ added: 2, duplicates: 1, overLimit: 0 });
+    expect((await db.shoppingItem.findMany({ where: { userId: alice }, orderBy: { label: 'asc' } })).map((i) => i.label)).toEqual(['Huevos', 'Leche', 'Pan']);
+    expect(await db.shoppingItem.count({ where: { userId: bob } })).toBe(1);
+  });
+  it('respeta el límite de la lista e informa de lo que no cabe', async () => {
+    await db.shoppingItem.createMany({ data: Array.from({ length: 299 }, (_, i) => ({ userId: alice, label: `a${i}` })) });
+    expect(await importShopping(alice, 'x1\nx2\nx3')).toEqual({ added: 1, duplicates: 0, overLimit: 2 });
+  });
+  it('rechaza texto vacío, enorme o que no es texto', async () => {
+    await expect(importShopping(alice, ' \n ')).rejects.toThrow(/No hay artículos/);
+    await expect(importShopping(alice, 'a'.repeat(20_001))).rejects.toThrow(/demasiado largo/);
+    await expect(importShopping(alice, 42)).rejects.toThrow();
   });
 });
