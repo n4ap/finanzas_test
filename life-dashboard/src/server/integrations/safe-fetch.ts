@@ -45,11 +45,14 @@ function once(url: URL, o: { maxBytes: number; timeoutMs: number; accept: string
     const lib = url.protocol === 'https:' ? https : http;
     const guardedLookup: typeof dnsLookup = ((host: string, options: unknown, cb: (...a: unknown[]) => void) => {
       const done = typeof options === 'function' ? (options as (...a: unknown[]) => void) : cb;
-      if (isIP(host)) { if (!allowPrivate() && !isPublicIp(host)) return done(new ServiceError('Dirección no permitida')); return done(null, host, isIP(host)); }
+      // Node ≥ 20 (autoSelectFamily) pide `all: true` y espera una lista de direcciones, no una sola.
+      const wantAll = typeof options === 'object' && options !== null && (options as { all?: boolean }).all === true;
+      if (isIP(host)) { if (!allowPrivate() && !isPublicIp(host)) return done(new ServiceError('Dirección no permitida')); return wantAll ? done(null, [{ address: host, family: isIP(host) }]) : done(null, host, isIP(host)); }
       dnsLookup(host, { all: true }, (err, addrs) => {
         if (err) return done(err);
         const list = addrs as { address: string; family: number }[];
         if (!allowPrivate() && list.some((a) => !isPublicIp(a.address))) return done(new ServiceError('La dirección resuelve a una red privada y no está permitida'));
+        if (wantAll) return done(null, list);
         const first = list[0]!;
         return done(null, first.address, first.family);
       });
