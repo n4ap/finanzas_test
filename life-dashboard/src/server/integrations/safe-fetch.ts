@@ -70,7 +70,15 @@ function once(url: URL, o: { maxBytes: number; timeoutMs: number; accept: string
     });
     const wall = setTimeout(() => req.destroy(new ServiceError('Tiempo de espera agotado')), o.timeoutMs * 2);
     req.on('timeout', () => req.destroy(new ServiceError('Tiempo de espera agotado')));
-    req.on('error', (e) => { clearTimeout(wall); reject(e instanceof ServiceError ? e : new ServiceError(/ENOTFOUND|EAI_AGAIN/.test(String((e as { code?: string }).code)) ? 'No se encontró el servidor' : 'No se pudo conectar con la dirección')); });
+    req.on('error', (e) => {
+      clearTimeout(wall);
+      if (e instanceof ServiceError) return reject(e);
+      const code = String((e as { code?: string }).code ?? '');
+      if (/ENOTFOUND|EAI_AGAIN/.test(code)) return reject(new ServiceError('No se encontró el servidor'));
+      // Solo el código técnico (p. ej. ETIMEDOUT, SELF_SIGNED_CERT_IN_CHAIN): ayuda a diagnosticar sin filtrar la URL.
+      console.warn('[safe-fetch] fallo de conexión:', code || e.message);
+      reject(new ServiceError(`No se pudo conectar con la dirección${/^[A-Z0-9_]{3,60}$/.test(code) ? ` (${code})` : ''}`));
+    });
     req.on('close', () => clearTimeout(wall));
     req.end();
   });
