@@ -29,6 +29,7 @@ export function FocusView({ nextActionMessage, current, nextEvent, goal }: Focus
   const pct = goal.total ? Math.round((goal.done / goal.total) * 100) : 0;
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 py-4">
+      <h1 className="sr-only">Modo Focus</h1>
       <Card className="p-6">
         <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground"><Target size={14} /> Tarea actual</p>
         {current ? (<><p className="text-2xl font-semibold leading-tight">{current.title}</p>{current.estimateMinutes && <Badge className="mt-3">~{current.estimateMinutes} min</Badge>}</>) : <p className="text-lg text-muted-foreground">Sin tarea en curso. Pulsa «¿Qué hago ahora?».</p>}

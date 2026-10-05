@@ -15,7 +15,11 @@ describe('crypto', () => {
     const c = encrypt('ya29.token');
     expect(c).not.toContain('ya29');
     expect(decrypt(c)).toBe('ya29.token');
-    expect(() => decrypt(c.slice(0, -2) + 'AA')).toThrow();
+    // Manipulación determinista: se invierte el primer byte del texto cifrado.
+    const [iv, tag, enc] = c.split('.');
+    const bytes = Buffer.from(enc!, 'base64url');
+    bytes[0] = bytes[0]! ^ 0xff;
+    expect(() => decrypt([iv, tag, bytes.toString('base64url')].join('.'))).toThrow();
   });
 });
 

@@ -12,7 +12,7 @@ export function GreetingClock({ name }: { name: string }) {
   }, []);
   return (
     <div className="w-full min-w-0 sm:w-auto">
-      <h1 className="text-xl font-semibold sm:text-2xl">{now ? greeting(now) : 'Hola'}, {name.split(' ')[0]} 👋</h1>
+      <p data-greeting className="text-xl font-semibold sm:text-2xl">{now ? greeting(now) : 'Hola'}, {name.split(' ')[0]} 👋</p>
       <p className="text-sm text-muted-foreground" suppressHydrationWarning>{now ? `${formatLongDate(now)} · ${formatTime(now)}` : ' '}</p>
     </div>
   );

@@ -1,3 +1,4 @@
+import type React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
@@ -65,6 +66,36 @@ export function ErrorState({ message = 'No se pudo cargar esta sección.', onRet
     <div role="alert" className="flex flex-col items-center gap-2 py-8 text-center">
       <p className="text-sm text-danger">{message}</p>
       {onRetry && <Button variant="outline" size="sm" onClick={onRetry}>Reintentar</Button>}
+    </div>
+  );
+}
+
+const field = 'w-full rounded-xl border bg-card px-3 text-sm placeholder:text-muted-foreground';
+export function Textarea({ className, ...p }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={cn(field, 'min-h-20 py-2', className)} {...p} />;
+}
+export function Select({ className, ...p }: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={cn(field, 'h-10', className)} {...p} />;
+}
+export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <label className={cn('block space-y-1', className)}>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** Control segmentado accesible (pestañas de vista). */
+export function Segmented<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; label: string }) {
+  return (
+    <div role="tablist" aria-label={label} className="inline-flex rounded-xl bg-muted p-0.5">
+      {options.map((o) => (
+        <button key={o.value} role="tab" aria-selected={o.value === value} onClick={() => onChange(o.value)}
+          className={cn('rounded-lg px-3 py-1.5 text-sm transition-colors', o.value === value ? 'bg-card font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+          {o.label}
+        </button>
+      ))}
     </div>
   );
 }

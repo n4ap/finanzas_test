@@ -8,6 +8,9 @@ import { loginSchema, registerSchema } from '@/lib/validation';
 import { authenticate, createSession, destroySession } from '../auth';
 
 /** Se devuelven email/nombre (nunca la contraseña) para repoblar el formulario tras un error. */
+// Intentos de login por minuto y email+IP. Solo se sobreescribe en pruebas e2e.
+const LOGIN_LIMIT = Number(process.env.LOGIN_RATE_LIMIT ?? 5);
+
 export interface FormState { error?: string; email?: string; name?: string }
 
 async function clientKey(scope: string, extra: string) {
@@ -19,7 +22,7 @@ export async function loginAction(_: FormState, form: FormData): Promise<FormSta
   const email = String(form.get('email') ?? '');
   const parsed = loginSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos no válidos', email };
-  const rl = rateLimit(await clientKey('login', parsed.data.email), 5, 60_000);
+  const rl = rateLimit(await clientKey('login', parsed.data.email), LOGIN_LIMIT, 60_000);
   if (!rl.ok) return { error: `Demasiados intentos. Espera ${Math.ceil(rl.retryAfterMs / 1000)} s.`, email };
   const user = await authenticate(parsed.data.email, parsed.data.password);
   if (!user) return { error: 'Email o contraseña incorrectos', email };

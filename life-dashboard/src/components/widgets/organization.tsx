@@ -32,7 +32,7 @@ export function TasksWidget({ d }: { d: DashboardData }) {
 }
 
 export function NewsWidget({ d }: { d: DashboardData }) {
-  const top = d.news.slice(0, 5);
+  const top = d.topNews;
   return (
     <WidgetFrame title="Lo importante de hoy" icon={Newspaper} href="/news">
       {top.length === 0 ? <EmptyState title="Sin noticias" hint="Configura tus fuentes en Ajustes." /> : (

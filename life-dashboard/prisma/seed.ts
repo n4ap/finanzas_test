@@ -60,7 +60,7 @@ async function main() {
       t('Llamar al seguro del coche', { priority: 1, due: 0, est: 15, project: pOtros!.id }),
       t('Renovar DNI', { priority: 2, due: 20, est: 45, project: pOtros!.id }),
       t('Comprar regalo cumpleaños de mamá', { priority: 2, due: 6, est: 45 }),
-      t('Reservar pista de pádel', { priority: 3, due: 2, est: 10 }),
+      { ...t('Reservar pista de pádel', { priority: 3, due: 2, est: 10 }), remindAt: day(2, 9) },
       t('Revisión semanal', { priority: 2, due: 7, est: 30, recurrence: 'weekly', tags: ['rutina'] }),
       t('Preparar maleta para Lisboa', { priority: 2, due: 28, est: 30 }),
       t('Enviar factura a cliente', { priority: 1, status: 'done', due: -1, est: 10, project: pFin!.id }),
@@ -93,16 +93,17 @@ async function main() {
       ev(calT.id, 'Workshop de IA', 8, 10, 240, { location: 'Online' }),
       ev(calP.id, 'Revisión coche (ITV)', 11, 9, 60),
       ev(calP.id, 'Vuelo a Lisboa', 27, 8, 120, { important: true }),
+      { calendarId: calF.id, title: 'Fin de semana en la sierra', startsAt: day(9, 0, 0), endsAt: day(10, 23, 59), allDay: true, location: 'Navacerrada' },
       ev(calT.id, 'Retrospectiva mensual', -3, 16, 60),
       ev(calP.id, 'Cine', -2, 21, 150),
     ],
   });
 
   // ── Email
-  const em = (fromName: string, fromEmail: string, subject: string, body: string, minsAgo: number, o: Partial<{ read: boolean; starred: boolean; important: boolean; needsReply: boolean; deadline: number; category: string; folder: string; summary: string }> = {}) => ({
+  const em = (fromName: string, fromEmail: string, subject: string, body: string, minsAgo: number, o: Partial<{ read: boolean; starred: boolean; important: boolean; needsReply: boolean; deadline: number; category: string; folder: string; summary: string; to: string[] }> = {}) => ({
     userId: uid, fromName, fromEmail, subject, body, snippet: body.slice(0, 110), receivedAt: new Date(now.getTime() - minsAgo * 60_000),
     read: o.read ?? false, starred: o.starred ?? false, important: o.important ?? false, needsReply: o.needsReply ?? false,
-    deadline: o.deadline != null ? day(o.deadline, 18) : null, category: o.category ?? 'personal', folder: o.folder ?? 'inbox', summary: o.summary, toEmails: ['alex@demo.test'],
+    deadline: o.deadline != null ? day(o.deadline, 18) : null, category: o.category ?? 'personal', folder: o.folder ?? 'inbox', summary: o.summary, toEmails: o.to ?? ['alex@demo.test'],
   });
   await db.email.createMany({
     data: [
@@ -116,8 +117,8 @@ async function main() {
       em('Sam Demo', 'sam@correo.test', 'Lista de la compra', 'He apuntado lo que falta: leche, pan, fruta y café. ¿Puedes pasar tú?', 1900, { read: true }),
       em('Club Padel Norte', 'info@padelnorte.test', 'Confirmación de reserva', 'Tu pista del miércoles a las 20:00 está confirmada.', 2500, { read: true, category: 'personal' }),
       em('Hotel Alfama', 'hola@hotelalfama.test', 'Confirmación de reserva en Lisboa', 'Reserva confirmada del 31/10 al 03/11. Desayuno incluido.', 3000, { read: true, starred: true, category: 'viajes' }),
-      em('Alex Demo', 'alex@demo.test', 'Re: Propuesta de presupuesto', 'Gracias, lo reviso y te confirmo mañana.', 4000, { folder: 'sent', read: true }),
-      em('Alex Demo', 'alex@demo.test', 'Notas de la reunión', 'Resumen de acuerdos: 1) cerrar alcance, 2) fecha de entrega, 3) revisar presupuesto.', 5000, { folder: 'sent', read: true }),
+      em('Alex Demo', 'alex@demo.test', 'Re: Propuesta de presupuesto', 'Gracias, lo reviso y te confirmo mañana.', 4000, { folder: 'sent', read: true, to: ['luis@empresa.test'] }),
+      em('Alex Demo', 'alex@demo.test', 'Notas de la reunión', 'Resumen de acuerdos: 1) cerrar alcance, 2) fecha de entrega, 3) revisar presupuesto.', 5000, { folder: 'sent', read: true, to: ['equipo@empresa.test', 'ana@empresa.test'] }),
     ],
   });
 

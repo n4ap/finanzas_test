@@ -28,7 +28,7 @@ await page.click('button[type=submit]');
 await page.waitForURL('**/dashboard', { waitUntil: 'commit' });
 await page.waitForSelector('text=Mi día');
 check('login correcto → /dashboard', true);
-check('saludo visible', /Buen(os|as)/.test(await page.textContent('h1')));
+check('saludo visible', /Buen(os|as)/.test(await page.textContent('[data-greeting]')));
 for (const w of ['Mi día', 'Prioridades', '¿Qué debería hacer ahora?', 'Calendario', 'Email', 'Tareas', 'Lo importante de hoy', 'Finanzas', 'Inversiones', 'Salud', 'Proyectos', 'Viajes', 'Notificaciones', 'Asistente IA'])
   check(`widget «${w}»`, (await page.locator(`section[aria-label="${w}"]`).count()) === 1);
 check('detecta conflicto de calendario en Prioridades', (await page.locator('section[aria-label=Prioridades]').textContent()).includes('Conflicto'));

@@ -2,10 +2,13 @@ import 'server-only';
 import { db } from '@/lib/db';
 import { addDays, endOfDay, startOfDay } from '@/lib/utils';
 import { buildPriorities, recommendNextAction, type EventLite, type TaskLite } from './insights';
+import { topOfToday } from './news-rank';
 import { monthSummary, monthlySeries, portfolioStats } from './metrics';
 
 /** Carga y deriva todo lo que necesita el dashboard. Cada consulta está acotada por userId. */
 export async function getDashboardData(userId: string, now = new Date()) {
+  const prefs = await db.user.findUnique({ where: { id: userId }, select: { preferences: true } });
+  const followedNews = ((prefs?.preferences as { followedNews?: string[] } | null)?.followedNews ?? []).filter((f) => typeof f === 'string');
   const dayStart = startOfDay(now);
   const [tasks, events, emails, news, txs, accounts, investments, metrics, workouts, projects, trips, notifications] = await Promise.all([
     db.task.findMany({ where: { userId, parentId: null }, include: { project: { select: { name: true } } }, orderBy: [{ priority: 'asc' }, { dueDate: 'asc' }] }),
@@ -37,7 +40,8 @@ export async function getDashboardData(userId: string, now = new Date()) {
 
   return {
     now,
-    tasks, taskLite, events, eventLite, todayEvents, emails, news, notifications, trips,
+    tasks, taskLite, events, eventLite, todayEvents, emails, notifications, trips,
+    topNews: topOfToday(news, followedNews, now),
     upcomingPayments,
     priorities: buildPriorities({
       now, tasks: taskLite, events: eventLite, upcomingPayments, spend: paid,

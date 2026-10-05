@@ -12,5 +12,10 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const [data, saved] = await Promise.all([getDashboardData(user.id), db.dashboardLayout.findUnique({ where: { userId: user.id } })]);
   const layout = mergeLayout(saved?.widgets as WidgetState[] | undefined);
-  return <WidgetGrid initial={layout} widgets={renderWidgets(data)} />;
+  return (
+    <>
+      <h1 className="sr-only">Dashboard</h1>
+      <WidgetGrid initial={layout} widgets={renderWidgets(data)} />
+    </>
+  );
 }
