@@ -6,7 +6,10 @@ import { refreshPrices, type TextFetcher } from './quotes';
 let alice: string, bob: string;
 const chartJson = (price: number, currency: string) => JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: price, currency } }] } });
 /** Mercado simulado: ticker → [precio, divisa]. Lo demás responde 404 (como Yahoo con un ticker inexistente). */
-const market = (m: Record<string, [number, string]>, calls: string[] = [], search: Record<string, string[]> = {}): TextFetcher => async (url) => {
+const market = (m: Record<string, [number, string]>, calls: string[] = [], search: Record<string, string[]> = {}, down?: number): TextFetcher => async (url) => {
+  const cg = /coingecko\.com.*ids=([a-z0-9-]+)/.exec(url);
+  if (cg) { calls.push(`coingecko:${cg[1]}`); const v = m[`cg:${cg[1]}`]; if (!v) throw new Error('El servidor respondió 404'); return { text: JSON.stringify({ [cg[1]!]: { eur: v[0] } }) }; }
+  if (down) { calls.push('down'); throw new Error(`El servidor respondió ${down}`); }
   const sq = /search\?q=([A-Z0-9]+)/.exec(url);
   if (sq) { calls.push(`search:${sq[1]}`); return { text: JSON.stringify({ quotes: (search[sq[1]!] ?? []).map((symbol) => ({ symbol, quoteType: 'ETF' })) }) }; }
   const t = decodeURIComponent(/chart\/([^?]+)/.exec(url)![1]!);
@@ -77,6 +80,18 @@ describe('refreshPrices', () => {
     expect(await refreshPrices(alice, market({}))).toMatchObject({ updated: [], failed: [] });
   });
 
+  it('si Yahoo responde 429, la cripto cae a CoinGecko', async () => {
+    await createInvestment(alice, pos('BTC', { assetType: 'crypto' }));
+    const r = await refreshPrices(alice, market({ 'cg:bitcoin': [61000, 'EUR'] }, [], {}, 429));
+    expect(r.failed).toEqual([]);
+    expect(await price('BTC')).toBe(61000);
+  });
+  it('si el mercado no responde lo dice con el código, no «no encontrado»', async () => {
+    await createInvestment(alice, pos('AAPL'));
+    const r = await refreshPrices(alice, market({}, [], {}, 429));
+    expect(r.updated).toEqual([]);
+    expect(r.failed[0]!.reason).toMatch(/consultar el mercado.*429/);
+  });
   it('con ISIN busca el fondo, prefiere el ticker en euros y lo recuerda', async () => {
     const id = await createInvestment(alice, pos('MIFONDO', { assetType: 'fund', isin: 'IE00BK5BQT80' }));
     const calls: string[] = [];

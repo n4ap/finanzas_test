@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fxSymbol, isValidIsin, normalizeCurrency, parseYahooChart, parseYahooSearch, toEur, yahooCandidates } from './quotes';
+import { coingeckoId, parseCoingecko, fxSymbol, isValidIsin, normalizeCurrency, parseYahooChart, parseYahooSearch, toEur, yahooCandidates } from './quotes';
 
 describe('yahooCandidates', () => {
   it('cripto: pareja en euros', () => { expect(yahooCandidates('crypto', 'btc')).toEqual(['BTC-EUR']); expect(yahooCandidates('crypto', 'ETH-USD')).toEqual(['ETH-USD']); });
@@ -33,4 +33,9 @@ describe('parseYahooSearch', () => {
     expect(parseYahooSearch(j)).toEqual(['VWCE.DE', '0P0001']);
   });
   it.each([null, {}, { quotes: 'x' }])('entrada inútil %#', (j) => expect(parseYahooSearch(j)).toEqual([]));
+});
+
+describe('CoinGecko', () => {
+  it('id por símbolo, con o sin pareja', () => { expect(coingeckoId('btc')).toBe('bitcoin'); expect(coingeckoId('ETH-EUR')).toBe('ethereum'); expect(coingeckoId('RAROCOIN')).toBeNull(); });
+  it('lee el precio en euros', () => { expect(parseCoingecko({ bitcoin: { eur: 60000 } }, 'bitcoin')).toBe(60000); expect(parseCoingecko({}, 'bitcoin')).toBeNull(); expect(parseCoingecko({ bitcoin: { eur: 0 } }, 'bitcoin')).toBeNull(); });
 });

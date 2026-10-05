@@ -61,3 +61,17 @@ export function parseYahooSearch(json: unknown): string[] {
   }
   return out.slice(0, 5);
 }
+
+/** Ids de CoinGecko de las criptomonedas más habituales (respaldo cuando Yahoo no responde). */
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', ADA: 'cardano', XRP: 'ripple', DOGE: 'dogecoin', DOT: 'polkadot', LTC: 'litecoin',
+  BNB: 'binancecoin', AVAX: 'avalanche-2', LINK: 'chainlink', MATIC: 'matic-network', POL: 'polygon-ecosystem-token', TRX: 'tron',
+  ATOM: 'cosmos', XLM: 'stellar', BCH: 'bitcoin-cash', UNI: 'uniswap', SHIB: 'shiba-inu', TON: 'the-open-network', USDT: 'tether', USDC: 'usd-coin',
+};
+export const coingeckoId = (symbol: string) => COINGECKO_IDS[symbol.trim().toUpperCase().replace(/-(EUR|USD)$/, '')] ?? null;
+
+/** Lee /simple/price?vs_currencies=eur de CoinGecko. */
+export function parseCoingecko(json: unknown, id: string): number | null {
+  const v = (json as Record<string, { eur?: unknown }> | null)?.[id]?.eur;
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1e9 ? v : null;
+}

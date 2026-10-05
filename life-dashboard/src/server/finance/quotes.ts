@@ -1,6 +1,6 @@
 import 'server-only';
 import { db } from '@/lib/db';
-import { fxSymbol, normalizeCurrency, parseYahooChart, parseYahooSearch, toEur, yahooCandidates, type Quote } from '@/lib/quotes';
+import { coingeckoId, fxSymbol, normalizeCurrency, parseCoingecko, parseYahooChart, parseYahooSearch, toEur, yahooCandidates, type Quote } from '@/lib/quotes';
 import { safeFetchText } from '../integrations/safe-fetch';
 import { audit, toNumber } from './core';
 import { recordSnapshot } from './investments';
@@ -16,18 +16,47 @@ export interface RefreshResult {
 const MAX_POSITIONS = 100;
 const BROWSER_UA = 'Mozilla/5.0 (compatible; LifeDashboard/1.0)';
 
-async function chart(fetcher: TextFetcher, ticker: string): Promise<Quote | null> {
-  try {
-    const { text } = await fetcher(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1d`, { maxBytes: 500_000, timeoutMs: 8_000, accept: 'application/json', userAgent: BROWSER_UA });
-    return parseYahooChart(JSON.parse(text));
-  } catch { return null; }
+/** Errores de red de esta actualización (código HTTP, tiempo agotado…): se muestran al usuario en lugar de «no encontrado». */
+type Diag = { errors: string[] };
+const YAHOO_HOSTS = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
+
+async function chart(fetcher: TextFetcher, ticker: string, diag: Diag): Promise<Quote | null> {
+  for (const host of YAHOO_HOSTS) {
+    try {
+      const { text } = await fetcher(`https://${host}/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1d`, { maxBytes: 500_000, timeoutMs: 8_000, accept: 'application/json', userAgent: BROWSER_UA });
+      return parseYahooChart(JSON.parse(text));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'error';
+      if (/\b404\b/.test(msg)) return null; // el ticker no existe: no tiene sentido probar otro servidor
+      if (!diag.errors.includes(msg)) diag.errors.push(msg);
+    }
+  }
+  return null;
 }
 
-async function searchIsin(fetcher: TextFetcher, isin: string): Promise<string[]> {
+async function coingecko(fetcher: TextFetcher, symbol: string, diag: Diag): Promise<Quote | null> {
+  const id = coingeckoId(symbol);
+  if (!id) return null;
+  try {
+    const { text } = await fetcher(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur`, { maxBytes: 100_000, timeoutMs: 8_000, accept: 'application/json' });
+    const price = parseCoingecko(JSON.parse(text), id);
+    return price === null ? null : { price, currency: 'EUR' };
+  } catch (e) {
+    const msg = `CoinGecko: ${e instanceof Error ? e.message : 'error'}`;
+    if (!diag.errors.includes(msg)) diag.errors.push(msg);
+    return null;
+  }
+}
+
+async function searchIsin(fetcher: TextFetcher, isin: string, diag: Diag): Promise<string[]> {
   try {
     const { text } = await fetcher(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=6&newsCount=0`, { maxBytes: 500_000, timeoutMs: 8_000, accept: 'application/json', userAgent: BROWSER_UA });
     return parseYahooSearch(JSON.parse(text));
-  } catch { return []; }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'error';
+    if (!diag.errors.includes(msg)) diag.errors.push(msg);
+    return [];
+  }
 }
 
 /**
@@ -37,10 +66,11 @@ async function searchIsin(fetcher: TextFetcher, isin: string): Promise<string[]>
 export async function refreshPrices(userId: string, fetcher: TextFetcher = safeFetchText): Promise<RefreshResult> {
   const positions = await db.investment.findMany({ where: { portfolio: { userId } }, orderBy: { symbol: 'asc' }, take: MAX_POSITIONS });
   const result: RefreshResult = { updated: [], failed: [], at: new Date().toISOString() };
+  const diag: Diag = { errors: [] };
   const fx = new Map<string, Promise<number | null>>();
   const rateFor = (currency: string) => {
     if (currency === 'EUR') return Promise.resolve(1);
-    if (!fx.has(currency)) fx.set(currency, chart(fetcher, fxSymbol(currency)).then((q) => q?.price ?? null));
+    if (!fx.has(currency)) fx.set(currency, chart(fetcher, fxSymbol(currency), diag).then((q) => q?.price ?? null));
     return fx.get(currency)!;
   };
 
@@ -55,13 +85,13 @@ export async function refreshPrices(userId: string, fetcher: TextFetcher = safeF
       const attempt = async (ticker: string) => {
         if (tried.has(ticker)) return null;
         tried.add(ticker);
-        const q = await chart(fetcher, ticker);
+        const q = await chart(fetcher, ticker, diag);
         return q ? { ticker, n: normalizeCurrency(q) } : null;
       };
       let best: { ticker: string; n: Quote } | null = null;
       if (inv.quoteSymbol) best = await attempt(inv.quoteSymbol);
       if (!best && inv.isin) {
-        for (const ticker of await searchIsin(fetcher, inv.isin)) {
+        for (const ticker of await searchIsin(fetcher, inv.isin, diag)) {
           const r = await attempt(ticker);
           if (!r) continue;
           if (!best) best = r;
@@ -69,15 +99,20 @@ export async function refreshPrices(userId: string, fetcher: TextFetcher = safeF
         }
       }
       if (!best) for (const ticker of yahooCandidates(inv.assetType, inv.symbol)) { best = await attempt(ticker); if (best) break; }
+      if (!best && inv.assetType === 'crypto') {
+        const q = await coingecko(fetcher, inv.symbol, diag);
+        if (q) best = { ticker: `coingecko:${coingeckoId(inv.symbol)}`, n: q };
+      }
       if (best) {
         const rate = await rateFor(best.n.currency);
         if (rate === null) reason = `No se pudo convertir ${best.n.currency} a euros.`;
         else found.set(inv.id, { ticker: best.ticker, eur: toEur(best.n, rate) });
       }
-      if (!found.has(inv.id)) result.failed.push({ symbol: inv.symbol, reason });
+      if (!found.has(inv.id)) result.failed.push({ symbol: inv.symbol, reason: diag.errors.length && reason.startsWith('No se encontr') ? `No se pudo consultar el mercado (${diag.errors[0]})` : reason });
     }
   };
   await Promise.all(Array.from({ length: 4 }, worker));
+  if (diag.errors.length) console.warn('[quotes] errores de red:', diag.errors.join(' | '));
   if (found.size === 0) return result;
 
   await db.$transaction(async (tx) => {
