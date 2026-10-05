@@ -1,9 +1,11 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
-import { dateOnlyToDate, nextOccurrence, TASK_STATUSES, type Recurrence, type TaskStatus } from '@/lib/tasks';
+import { dateOnlyToDate, type TaskStatus } from '@/lib/tasks';
 import { idSchema, taskSchema } from '@/lib/validation';
 import { requireUser } from '../auth';
+import { run } from '../finance/service';
+import { setTaskStatusFor } from '../life/tasks';
 import { fail, firstIssue, type ActionResult } from './result';
 
 const refresh = () => { revalidatePath('/tasks'); revalidatePath('/dashboard'); revalidatePath('/projects'); };
@@ -59,25 +61,9 @@ export async function updateTask(id: string, input: unknown): Promise<ActionResu
 /** Cambia el estado (Kanban, checkbox). Al completar una recurrente se crea la siguiente ocurrencia. */
 export async function setTaskStatus(id: string, status: TaskStatus): Promise<ActionResult> {
   const user = await requireUser();
-  if (!idSchema.safeParse(id).success || !TASK_STATUSES.includes(status)) return fail('Datos no válidos');
-  const t = await db.task.findFirst({ where: { id, userId: user.id } });
-  if (!t) return fail('Tarea no encontrada');
-  if (t.status === status) return { ok: true };
-  const completing = status === 'done';
-  await db.$transaction(async (tx) => {
-    await tx.task.update({ where: { id }, data: { status, completedAt: completing ? new Date() : null } });
-    if (completing && t.recurrence && t.dueDate && !t.parentId) {
-      await tx.task.create({
-        data: {
-          userId: user.id, title: t.title, description: t.description, priority: t.priority, status: 'next', estimateMinutes: t.estimateMinutes,
-          projectId: t.projectId, tags: t.tags, recurrence: t.recurrence, dueDate: nextOccurrence(t.dueDate, t.recurrence as Recurrence),
-          remindAt: t.remindAt && t.dueDate ? new Date(nextOccurrence(t.dueDate, t.recurrence as Recurrence).getTime() - (t.dueDate.getTime() - t.remindAt.getTime())) : null,
-        },
-      });
-    }
-    // Completar la tarea padre completa sus subtareas abiertas.
-    if (completing && !t.parentId) await tx.task.updateMany({ where: { parentId: id, status: { not: 'done' } }, data: { status: 'done', completedAt: new Date() } });
-  });
+  if (!idSchema.safeParse(id).success) return fail('Datos no válidos');
+  const r = await run(() => setTaskStatusFor(user.id, id, status));
+  if (!r.ok) return r;
   refresh();
   return { ok: true };
 }

@@ -70,20 +70,43 @@ export interface FinanceProvider {
   importTransactions(ctx: ProviderContext, input: unknown): Promise<TransactionDTO[]>;
 }
 
+/** Contexto de una petición al asistente: siempre un usuario autenticado y su zona horaria. */
+export interface AIContext {
+  userId: string;
+  now: Date;
+  /** `Date.getTimezoneOffset()` del navegador (minutos, UTC − local). */
+  tzOffset: number;
+}
+
+export interface AIToolCall {
+  id: string;
+  name: string;
+  args: unknown;
+}
+
 export interface AIMessageDTO {
   role: 'user' | 'assistant' | 'tool';
   content: string;
+  /** assistant: llamadas solicitadas. */
+  toolCalls?: AIToolCall[];
+  /** tool: a qué llamada responde. */
+  toolCallId?: string;
+  toolName?: string;
 }
 
-/** Herramienta interna que el asistente puede invocar (en lugar de inventarse datos). */
-export interface AITool {
+/** Descripción de una herramienta para el proveedor (un LLM real la recibiría como JSON Schema). */
+export interface AIToolInfo {
   name: string;
   description: string;
-  run(userId: string, args: Record<string, unknown>): Promise<unknown>;
+  kind: 'read' | 'write';
 }
 
+/**
+ * Un proveedor decide qué herramientas llamar y redacta la respuesta a partir de sus resultados.
+ * NUNCA accede a la base de datos: solo ve lo que devuelven las herramientas (que el orquestador acota al usuario)
+ * y las herramientas de escritura solo crean propuestas que el usuario debe confirmar.
+ */
 export interface AIProvider {
   readonly id: string;
-  /** El proveedor decide qué tools usar y redacta la respuesta a partir de sus resultados. */
-  respond(input: { userId: string; history: AIMessageDTO[]; tools: AITool[] }): Promise<{ content: string; toolCalls: { name: string; args: unknown }[] }>;
+  respond(input: { ctx: AIContext; history: AIMessageDTO[]; tools: AIToolInfo[] }): Promise<{ content: string; toolCalls: AIToolCall[] }>;
 }

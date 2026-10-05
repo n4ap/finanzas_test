@@ -310,8 +310,9 @@ async function main() {
   });
   await db.automation.createMany({
     data: [
-      { userId: uid, name: 'Email con fecha límite → tarea', triggerType: 'email_received', triggerConfig: { needsReply: true }, actionType: 'create_task', actionConfig: {}, requiresConfirmation: true },
-      { userId: uid, name: 'Aviso 1 día antes de un pago', triggerType: 'date', triggerConfig: { daysBefore: 1 }, actionType: 'notify', actionConfig: {}, requiresConfirmation: false },
+      { userId: uid, name: 'Aviso de tareas atrasadas', triggerType: 'task_overdue', triggerConfig: {}, actionType: 'notify', actionConfig: {}, requiresConfirmation: false },
+      { userId: uid, name: 'Regalo de cumpleaños', triggerType: 'birthday_soon', triggerConfig: { days: 7 }, actionType: 'create_task', actionConfig: { titleTemplate: 'Comprar regalo: {subject}' }, requiresConfirmation: true },
+      { userId: uid, name: 'Presupuesto al 80 %', triggerType: 'budget_alert', triggerConfig: { threshold: 80 }, actionType: 'notify', actionConfig: {}, requiresConfirmation: false, enabled: false },
     ],
   });
 

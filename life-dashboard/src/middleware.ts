@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC = ['/login', '/register'];
+// /api/automations/run se autentica solo con CRON_SECRET (llamada de un planificador, sin cookie).
+const PUBLIC = ['/login', '/register', '/api/automations/run'];
 
 /**
  * Barrera ligera: sin cookie de sesión → /login (o 401 en /api).

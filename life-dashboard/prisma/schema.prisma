@@ -44,6 +44,7 @@ model User {
   families      FamilyMember[]
   shopping      ShoppingItem[]
   healthGoals   HealthGoal[]
+  proposals     AIProposal[]
   auditLogs     AuditLog[]
   layout        DashboardLayout?
   memberships   HouseholdMember[]
@@ -493,19 +494,50 @@ model Notification {
 }
 
 model Automation {
-  id                   String    @id @default(cuid())
+  id                   String          @id @default(cuid())
   userId               String
   name                 String
-  triggerType          String // email_received | date | event_soon | investment_change | expense
-  triggerConfig        Json      @default("{}")
-  actionType           String // create_task | notify | summarize | update_dashboard | alert
-  actionConfig         Json      @default("{}")
-  requiresConfirmation Boolean   @default(true)
-  enabled              Boolean   @default(true)
+  triggerType          String // task_overdue | budget_alert | birthday_soon | email_needs_reply | trip_soon | weekly
+  triggerConfig        Json            @default("{}")
+  actionType           String // notify | create_task | digest
+  actionConfig         Json            @default("{}")
+  requiresConfirmation Boolean         @default(true)
+  enabled              Boolean         @default(true)
   lastRunAt            DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs                 AutomationRun[]
+}
+
+/// Cada disparo de una automatización por entidad/periodo; la unicidad garantiza que no se repita (idempotencia).
+model AutomationRun {
+  id           String     @id @default(cuid())
+  automationId String
+  key          String
+  createdAt    DateTime   @default(now())
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, key])
+}
+
+/// Acción propuesta por el asistente o una automatización: NO se ejecuta hasta que el usuario la confirma.
+model AIProposal {
+  id             String    @id @default(cuid())
+  userId         String
+  conversationId String?
+  tool           String
+  args           Json
+  summary        String
+  status         String    @default("pending") // pending | confirmed | cancelled | failed
+  result         String?
+  source         String    @default("assistant") // assistant | automation
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+  resolvedAt     DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
 }
 
 model AIConversation {
