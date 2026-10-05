@@ -4,12 +4,12 @@ import { formatEUR } from '@/lib/utils';
 import { makeTooltip } from './tooltip';
 
 export interface LineSeries { key: string; label: string; color: string; area?: boolean }
-const compact = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 })}k` : String(n));
+const compact = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toLocaleString('es-ES', { maximumFractionDigits: 1 })}k` : n.toLocaleString('es-ES', { maximumFractionDigits: 1 }));
 
 /** Línea de 2 px (con eje desde 0 y área tenue por defecto; sin área si el eje no parte de 0, para no exagerar variaciones) con cursor vertical que salta a la fecha más cercana y punto final de 8 px con anillo del color de la superficie. */
-export function TrendLine({ data, series, height = 220, ariaLabel, xLabel, zeroBase = true }: { data: Record<string, string | number>[]; series: LineSeries[]; height?: number | 'fill'; ariaLabel: string; xLabel?: (v: string) => string; zeroBase?: boolean }) {
+export function TrendLine({ data, series, height = 220, ariaLabel, xLabel, zeroBase = true, format = formatEUR }: { data: Record<string, string | number>[]; series: LineSeries[]; height?: number | 'fill'; ariaLabel: string; xLabel?: (v: string) => string; zeroBase?: boolean; format?: (v: number) => string }) {
   const lastIdx = data.length - 1;
-  const Tip = makeTooltip(formatEUR, { title: (l) => (xLabel ? xLabel(String(l)) : String(l)) });
+  const Tip = makeTooltip(format, { title: (l) => (xLabel ? xLabel(String(l)) : String(l)) });
   return (
     <div style={height === 'fill' ? undefined : { height }} className={height === 'fill' ? 'absolute inset-0' : undefined} role="img" aria-label={ariaLabel}>
       <ResponsiveContainer width="100%" height="100%">

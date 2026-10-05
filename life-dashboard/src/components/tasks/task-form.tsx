@@ -12,7 +12,7 @@ const toLocalInput = (iso: string | null) => {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 };
 
-export function TaskForm({ open, onClose, task, parentId, projects, defaultDue }: { open: boolean; onClose: () => void; task?: TaskDTO | null; parentId?: string; projects: ProjectOption[]; defaultDue?: string }) {
+export function TaskForm({ open, onClose, task, parentId, projects, defaultDue, defaultProjectId }: { open: boolean; onClose: () => void; task?: TaskDTO | null; parentId?: string; projects: ProjectOption[]; defaultDue?: string; defaultProjectId?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const editing = !!task;
@@ -42,7 +42,7 @@ export function TaskForm({ open, onClose, task, parentId, projects, defaultDue }
           <Field label="Estado"><Select name="status" defaultValue={task?.status ?? 'inbox'}>{TASK_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</Select></Field>
           <Field label="Fecha límite"><Input name="dueDate" type="date" defaultValue={task ? dateToDateOnly(task.dueDate) : defaultDue ?? ''} /></Field>
           <Field label="Duración (min)"><Input name="estimateMinutes" type="number" min={1} max={1440} defaultValue={task?.estimateMinutes ?? ''} /></Field>
-          <Field label="Proyecto"><Select name="projectId" defaultValue={task?.projectId ?? ''}><option value="">Sin proyecto</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
+          <Field label="Proyecto"><Select name="projectId" defaultValue={task?.projectId ?? defaultProjectId ?? ''}><option value="">Sin proyecto</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
           <Field label="Repetir"><Select name="recurrence" defaultValue={task?.recurrence ?? ''}><option value="">No se repite</option>{RECURRENCES.map((r) => <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>)}</Select></Field>
           <Field label="Etiquetas"><Input name="tags" defaultValue={task?.tags.join(', ')} placeholder="dev, casa" /></Field>
           <Field label="Recordatorio"><Input name="remindAt" type="datetime-local" defaultValue={toLocalInput(task?.remindAt ?? null)} /></Field>

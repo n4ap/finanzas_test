@@ -1,6 +1,9 @@
 import 'server-only';
 import { db } from '@/lib/db';
 import { addDays, endOfDay, startOfDay } from '@/lib/utils';
+import { daysUntil } from '@/lib/travel';
+import { nextBirthday } from '@/lib/family';
+import { projectStats } from '@/lib/projects';
 import { buildPriorities, recommendNextAction, type EventLite, type TaskLite } from './insights';
 import { topOfToday } from './news-rank';
 import { accessibleAccountsWhere } from './finance/core';
@@ -12,7 +15,7 @@ export async function getDashboardData(userId: string, now = new Date()) {
   const prefs = await db.user.findUnique({ where: { id: userId }, select: { preferences: true } });
   const followedNews = ((prefs?.preferences as { followedNews?: string[] } | null)?.followedNews ?? []).filter((f) => typeof f === 'string');
   const dayStart = startOfDay(now);
-  const [tasks, events, emails, news, txs, accounts, budgets, investments, metrics, workouts, projects, trips, notifications] = await Promise.all([
+  const [tasks, events, emails, news, txs, accounts, budgets, investments, metrics, workouts, projects, trips, notifications, family] = await Promise.all([
     db.task.findMany({ where: { userId, parentId: null }, include: { project: { select: { name: true } } }, orderBy: [{ priority: 'asc' }, { dueDate: 'asc' }] }),
     db.event.findMany({ where: { calendar: { userId }, startsAt: { gte: addDays(dayStart, -1), lte: endOfDay(addDays(now, 14)) } }, include: { calendar: { select: { name: true, color: true } } }, orderBy: { startsAt: 'asc' } }),
     db.email.findMany({ where: { userId, folder: 'inbox' }, orderBy: { receivedAt: 'desc' }, take: 30 }),
@@ -23,9 +26,10 @@ export async function getDashboardData(userId: string, now = new Date()) {
     db.investment.findMany({ where: { portfolio: { userId } } }),
     db.healthMetric.findMany({ where: { userId, date: { gte: addDays(dayStart, -30) } }, orderBy: { date: 'asc' } }),
     db.workout.findMany({ where: { userId, date: { gte: addDays(dayStart, -30), lte: endOfDay(addDays(now, 7)) } }, orderBy: { date: 'asc' } }),
-    db.project.findMany({ where: { userId }, include: { tasks: { select: { status: true } } }, orderBy: { priority: 'asc' } }),
-    db.trip.findMany({ where: { userId, endDate: { gte: dayStart } }, orderBy: { startDate: 'asc' }, take: 3 }),
+    db.project.findMany({ where: { userId }, include: { tasks: { where: { parentId: null }, select: { status: true, dueDate: true } } }, orderBy: { priority: 'asc' } }),
+    db.trip.findMany({ where: { userId, endDate: { gte: dayStart } }, include: { packing: { select: { packed: true } } }, orderBy: { startDate: 'asc' }, take: 3 }),
     db.notification.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 5 }),
+    db.familyMember.findMany({ where: { userId, birthday: { not: null } } }),
   ]);
 
   const num = (d: { toString(): string }) => Number(d.toString());
@@ -43,6 +47,10 @@ export async function getDashboardData(userId: string, now = new Date()) {
 
   const series = (kind: string) => metrics.filter((m) => m.kind === kind).map((m) => ({ date: m.date, value: m.value }));
 
+  const projectRows = projects.map((p) => ({ ...p, stats: projectStats(p.tasks, p, now) }));
+  const birthdays = family.flatMap((m) => { const b = nextBirthday(m.birthday!, now); return [{ id: m.id, name: m.name, daysUntil: b.daysUntil, turning: b.turning }]; });
+  const tripLite = trips.map((t) => ({ id: t.id, name: t.name, daysUntil: daysUntil(t.startDate, now), packingPending: t.packing.filter((p) => !p.packed).length, packingTotal: t.packing.length }));
+
   return {
     now,
     tasks, taskLite, events, eventLite, todayEvents, emails, notifications, trips,
@@ -50,13 +58,14 @@ export async function getDashboardData(userId: string, now = new Date()) {
     upcomingPayments,
     priorities: buildPriorities({
       now, tasks: taskLite, events: eventLite, upcomingPayments, spend: paid, budgets: budgetRows,
+      projects: projectRows.map((p) => ({ id: p.id, name: p.name, health: p.stats.health, reason: p.stats.reason })), birthdays, trips: tripLite,
       emails: emails.map((e) => ({ id: e.id, subject: e.subject, fromName: e.fromName, needsReply: e.needsReply, replied: e.replied, deadline: e.deadline, important: e.important })),
     }),
     nextAction: recommendNextAction({ now, tasks: taskLite, events: eventLite }),
     finance: { month, series: monthlySeries(paid, now), cash, netWorth: sumMoney([cash, positions.value]), budgets: budgetRows },
     positions,
     health: { weight: series('weight'), steps: series('steps'), sleep: series('sleep'), workouts },
-    projects: projects.map((p) => ({ ...p, progress: p.tasks.length ? p.tasks.filter((t) => t.status === 'done').length / p.tasks.length : 0 })),
+    projects: projectRows.map((p) => ({ id: p.id, name: p.name, color: p.color, status: p.status, progress: p.stats.progress, health: p.stats.health })),
   };
 }
 

@@ -31,3 +31,9 @@ export function relativeDay(d: Date, now = new Date()): string {
   if (diff < 0) return `Hace ${-diff} días`;
   return `En ${diff} días`;
 }
+
+/** Número en formato es-ES con separador de miles siempre (coherente con formatEUR). */
+export const formatNumber = (n: number, digits = 0) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: digits, minimumFractionDigits: digits, useGrouping: 'always' }).format(n);
+
+/** Euros sin decimales si es entero y con 2 si no (evita que 930,50 € se muestre como 931 €). */
+export const formatEURExact = (n: number) => formatEUR(n, Number.isInteger(n) ? 0 : 2);

@@ -7,7 +7,7 @@ PORT="${PORT:-3100}"
 npx prisma db push --skip-generate >/dev/null
 export BASE_URL="http://localhost:$PORT" LOGIN_RATE_LIMIT=1000
 status=0
-for script in smoke phase2 phase3 mobile; do
+for script in smoke phase2 phase3 phase4 mobile; do
   npx tsx prisma/seed.ts >/dev/null
   npx next start -p "$PORT" >/tmp/ld-e2e-server.log 2>&1 &
   server=$!

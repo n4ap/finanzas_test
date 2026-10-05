@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Briefcase, CheckSquare, Mail, Newspaper } from 'lucide-react';
 import { Badge, EmptyState } from '@/components/ui/primitives';
 import { relativeDay } from '@/lib/utils';
@@ -56,7 +57,7 @@ export function ProjectsWidget({ d }: { d: DashboardData }) {
         <ul className="space-y-3">
           {d.projects.slice(0, 4).map((p) => (
             <li key={p.id}>
-              <div className="mb-1 flex justify-between text-sm"><span className="truncate">{p.name}</span><span className="text-xs text-muted-foreground">{Math.round(p.progress * 100)}%</span></div>
+              <div className="mb-1 flex items-center justify-between gap-2 text-sm"><Link href={`/projects/${p.id}`} className="truncate hover:text-primary">{p.name}</Link><span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">{(p.health === 'late' || p.health === 'at_risk') && <span className="font-medium text-warning">{p.health === 'late' ? 'Fuera de plazo' : 'En riesgo'}</span>}{Math.round(p.progress * 100)}%</span></div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(p.progress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={`Progreso de ${p.name}`}>
                 <div className="h-full rounded-full" style={{ width: `${Math.round(p.progress * 100)}%`, background: p.color }} />
               </div>

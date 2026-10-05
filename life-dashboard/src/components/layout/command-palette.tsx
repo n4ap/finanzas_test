@@ -68,7 +68,7 @@ export function CommandPalette() {
           <div role="dialog" aria-modal="true" aria-label="Búsqueda global" className="w-full max-w-xl animate-fade-up overflow-hidden rounded-2xl border bg-card shadow-2xl">
             <div className="flex items-center gap-2 border-b px-4">
               <Search size={16} className="text-muted-foreground" />
-              <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0); }} placeholder="Busca emails, tareas, eventos, proyectos, finanzas, noticias, viajes…"
+              <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); setCursor(0); }} placeholder="Busca emails, tareas, eventos, proyectos, finanzas, noticias, viajes, familia…"
                 className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 onKeyDown={(e) => {
                   if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((c) => Math.min(c + 1, results.length - 1)); }

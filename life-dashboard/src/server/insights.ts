@@ -9,7 +9,7 @@ export interface PaymentLite { id: string; description: string; amount: number; 
 export interface SpendLite { category: string; amount: number; date: Date }
 
 export type Severity = 'urgent' | 'important' | 'info';
-export interface PriorityItem { id: string; kind: 'task' | 'email' | 'payment' | 'event' | 'conflict' | 'finance'; severity: Severity; title: string; detail: string; href: string }
+export interface PriorityItem { id: string; kind: 'task' | 'email' | 'payment' | 'event' | 'conflict' | 'finance' | 'project' | 'family' | 'travel'; severity: Severity; title: string; detail: string; href: string }
 
 const DAY = 86_400_000;
 const sod = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -56,11 +56,14 @@ export function unusualSpending(spend: SpendLite[], now: Date): { category: stri
 }
 
 export interface BudgetLite { category: string; budget: number; spent: number; status: 'ok' | 'warn' | 'over' }
-export interface PriorityInput { now: Date; tasks: TaskLite[]; emails: EmailLite[]; events: EventLite[]; upcomingPayments: PaymentLite[]; spend: SpendLite[]; budgets?: BudgetLite[] }
+export interface ProjectLite { id: string; name: string; health: string; reason: string }
+export interface BirthdayLite { id: string; name: string; daysUntil: number; turning: number }
+export interface TripLite { id: string; name: string; daysUntil: number; packingPending: number; packingTotal: number }
+export interface PriorityInput { now: Date; tasks: TaskLite[]; emails: EmailLite[]; events: EventLite[]; upcomingPayments: PaymentLite[]; spend: SpendLite[]; budgets?: BudgetLite[]; projects?: ProjectLite[]; birthdays?: BirthdayLite[]; trips?: TripLite[] }
 
 const rank: Record<Severity, number> = { urgent: 0, important: 1, info: 2 };
 
-export function buildPriorities({ now, tasks, emails, events, upcomingPayments, spend, budgets = [] }: PriorityInput): PriorityItem[] {
+export function buildPriorities({ now, tasks, emails, events, upcomingPayments, spend, budgets = [], projects = [], birthdays = [], trips = [] }: PriorityInput): PriorityItem[] {
   const items: PriorityItem[] = [];
 
   for (const t of tasks.filter((t) => isOverdue(t, now))) {
@@ -91,6 +94,15 @@ export function buildPriorities({ now, tasks, emails, events, upcomingPayments, 
   }
   for (const e of events.filter((e) => e.important && e.startsAt > now && e.startsAt.getTime() - now.getTime() < 2 * DAY)) {
     items.push({ id: `evt-${e.id}`, kind: 'event', severity: 'important', title: e.title, detail: 'Evento importante próximo', href: '/calendar' });
+  }
+  for (const p of projects.filter((p) => p.health === 'late' || p.health === 'at_risk')) {
+    items.push({ id: `project-${p.id}`, kind: 'project', severity: p.health === 'late' ? 'important' : 'info', title: p.health === 'late' ? `Proyecto fuera de plazo: ${p.name}` : `Proyecto en riesgo: ${p.name}`, detail: p.reason, href: `/projects/${p.id}` });
+  }
+  for (const b of birthdays.filter((b) => b.daysUntil >= 0 && b.daysUntil <= 7)) {
+    items.push({ id: `birthday-${b.id}`, kind: 'family', severity: b.daysUntil <= 1 ? 'important' : 'info', title: `Cumpleaños de ${b.name}`, detail: `${b.daysUntil === 0 ? 'Hoy' : b.daysUntil === 1 ? 'Mañana' : 'En ' + plural(b.daysUntil, 'día', 'días')} · cumple ${b.turning}`, href: '/family' });
+  }
+  for (const t of trips.filter((t) => t.daysUntil >= 0 && t.daysUntil <= 7 && t.packingPending > 0)) {
+    items.push({ id: `trip-${t.id}`, kind: 'travel', severity: t.daysUntil <= 2 ? 'important' : 'info', title: `Maleta de ${t.name}`, detail: `Faltan ${plural(t.packingPending, 'cosa', 'cosas')} por preparar · sales ${t.daysUntil === 0 ? 'hoy' : t.daysUntil === 1 ? 'mañana' : 'en ' + plural(t.daysUntil, 'día', 'días')}`, href: `/travel/${t.id}` });
   }
   return items.sort((a, b) => rank[a.severity] - rank[b.severity]);
 }

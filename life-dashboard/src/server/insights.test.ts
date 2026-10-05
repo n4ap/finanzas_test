@@ -74,3 +74,18 @@ describe('buildPriorities', () => {
     expect(items[0]!.href).toBe('/finance?tab=presupuestos');
   });
 });
+
+describe('buildPriorities: proyectos, familia y viajes', () => {
+  const base = { now, tasks: [], emails: [], events: [], upcomingPayments: [], spend: [] };
+  it('avisa de proyectos fuera de plazo/en riesgo, cumpleaños próximos y maletas pendientes', () => {
+    const items = buildPriorities({
+      ...base,
+      projects: [{ id: 'p1', name: 'Reforma', health: 'late', reason: 'Fecha vencida' }, { id: 'p2', name: 'Web', health: 'at_risk', reason: '1 tarea atrasada' }, { id: 'p3', name: 'OK', health: 'on_track', reason: '' }],
+      birthdays: [{ id: 'b1', name: 'Mamá', daysUntil: 1, turning: 60 }, { id: 'b2', name: 'Lejos', daysUntil: 30, turning: 5 }],
+      trips: [{ id: 't1', name: 'Lisboa', daysUntil: 2, packingPending: 3, packingTotal: 6 }, { id: 't2', name: 'Lejano', daysUntil: 40, packingPending: 5, packingTotal: 5 }, { id: 't3', name: 'Listo', daysUntil: 1, packingPending: 0, packingTotal: 4 }],
+    });
+    expect(items.map((i) => [i.id, i.severity])).toEqual([['project-p1', 'important'], ['birthday-b1', 'important'], ['trip-t1', 'important'], ['project-p2', 'info']]);
+    expect(items.find((i) => i.id === 'birthday-b1')?.detail).toBe('Mañana · cumple 60');
+  });
+});
+

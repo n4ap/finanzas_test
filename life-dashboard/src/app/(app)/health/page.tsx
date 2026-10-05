@@ -1,6 +1,11 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { HealthView } from '@/components/health/health-view';
+import { requireUser } from '@/server/auth';
+import { getHealthData } from '@/server/life/queries';
 
 export const metadata = { title: 'Salud' };
-export default function Page() {
-  return <ComingSoon title="Salud" phase={4} description="Peso, entrenamientos, pasos, sueño y objetivos." />;
+export const dynamic = 'force-dynamic';
+
+export default async function Page() {
+  const user = await requireUser();
+  return <HealthView d={await getHealthData(user.id)} />;
 }

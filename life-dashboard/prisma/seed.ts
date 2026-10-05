@@ -14,6 +14,9 @@ const between = (a: number, b: number) => a + rnd() * (b - a);
 const now = new Date();
 const day = (offset: number, h = 0, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, h, m);
 
+/** Fecha sin hora (mediodía UTC), como las guarda la app. */
+const noon = (offset: number, year = now.getFullYear(), monthOffset = 0) => new Date(Date.UTC(year, now.getMonth() + monthOffset, now.getDate() + offset, 12));
+
 async function main() {
   await db.user.deleteMany({ where: { email: DEMO_EMAIL } });
   await db.user.deleteMany({ where: { email: 'pareja@lifedashboard.dev' } });
@@ -239,7 +242,7 @@ async function main() {
   // ── Salud
   const metrics: { userId: string; kind: string; date: Date; value: number }[] = [];
   for (let i = 59; i >= 0; i--) {
-    const d = day(-i);
+    const d = noon(-i);
     metrics.push({ userId: uid, kind: 'weight', date: d, value: Math.round((79.5 - (59 - i) * 0.04 + between(-0.3, 0.3)) * 10) / 10 });
     metrics.push({ userId: uid, kind: 'steps', date: d, value: Math.round(between(4500, 12500)) });
     metrics.push({ userId: uid, kind: 'sleep', date: d, value: Math.round(between(5.8, 8.2) * 10) / 10 });
@@ -257,8 +260,7 @@ async function main() {
 
   // ── Viajes
   const lisboa = await db.trip.create({
-    data: { userId: uid, name: 'Escapada a Lisboa', destination: 'Lisboa, Portugal', startDate: day(27), endDate: day(30), budget: 900, notes: 'Probar pastéis de Belém',
-      itinerary: [{ day: 1, plan: 'Llegada, Alfama y cena' }, { day: 2, plan: 'Belém y LX Factory' }, { day: 3, plan: 'Sintra' }, { day: 4, plan: 'Regreso' }] },
+    data: { userId: uid, name: 'Escapada a Lisboa', destination: 'Lisboa, Portugal', startDate: noon(27), endDate: noon(30), budget: 900, notes: 'Probar pastéis de Belém' },
   });
   await db.travel.createMany({
     data: [
@@ -267,16 +269,34 @@ async function main() {
       { tripId: lisboa.id, kind: 'flight', title: 'Lisboa → Madrid', reference: 'XK30MD', startsAt: day(30, 18), endsAt: day(30, 19, 15), cost: 170 },
     ],
   });
-  await db.trip.create({ data: { userId: uid, name: 'Verano en la costa', destination: 'Costa Brava', startDate: day(240), endDate: day(250), budget: 1800, itinerary: [] } });
+  await db.itineraryItem.createMany({
+    data: [
+      { tripId: lisboa.id, date: noon(27), time: '10:30', title: 'Llegada y check-in', notes: 'Equipaje en recepción si la habitación no está lista' },
+      { tripId: lisboa.id, date: noon(27), time: '13:30', title: 'Comida en Alfama' },
+      { tripId: lisboa.id, date: noon(27), time: '20:30', title: 'Cena y fado' },
+      { tripId: lisboa.id, date: noon(28), time: '09:30', title: 'Torre de Belém y Pastéis de Belém' },
+      { tripId: lisboa.id, date: noon(28), time: '17:00', title: 'LX Factory' },
+      { tripId: lisboa.id, date: noon(29), title: 'Excursión a Sintra', notes: 'Tren desde Rossio' },
+      { tripId: lisboa.id, date: noon(30), time: '11:00', title: 'Check-out y paseo final' },
+    ],
+  });
+  await db.packingItem.createMany({
+    data: [['DNI / pasaporte', true], ['Cargador del móvil', true], ['Documentación de reservas', false], ['Calzado cómodo', false], ['Paraguas', false], ['Cámara', false]].map(([label, packed]) => ({ tripId: lisboa.id, label: label as string, packed: packed as boolean })),
+  });
+  await db.trip.create({ data: { userId: uid, name: 'Verano en la costa', destination: 'Costa Brava', startDate: noon(240), endDate: noon(250), budget: 1800 } });
+
+  // ── Metas de salud
+  await db.healthGoal.createMany({ data: [{ userId: uid, kind: 'steps', target: 9000 }, { userId: uid, kind: 'sleep', target: 7.5 }, { userId: uid, kind: 'workouts', target: 3 }, { userId: uid, kind: 'weight', target: 76 }] });
 
   // ── Familia
   await db.familyMember.createMany({
     data: [
-      { userId: uid, name: 'Sam', relation: 'Pareja', birthday: new Date(1991, now.getMonth() + 2, 14), color: '#ec4899' },
-      { userId: uid, name: 'Mamá', relation: 'Madre', birthday: day(6), color: '#10b981' },
-      { userId: uid, name: 'Lucía', relation: 'Sobrina', birthday: new Date(2018, now.getMonth() + 1, 3), color: '#f59e0b' },
+      { userId: uid, name: 'Sam', relation: 'Pareja', birthday: new Date(Date.UTC(1991, now.getMonth() + 2, 14, 12)), color: '#ec4899', notes: 'Le gustan las plantas y el té' },
+      { userId: uid, name: 'Mamá', relation: 'Madre', birthday: noon(6, 1962), color: '#10b981', notes: 'Idea de regalo: libro de jardinería' },
+      { userId: uid, name: 'Lucía', relation: 'Sobrina', birthday: new Date(Date.UTC(2018, now.getMonth() + 1, 3, 12)), color: '#f59e0b' },
     ],
   });
+  await db.shoppingItem.createMany({ data: ['Leche', 'Pan', 'Tomates', 'Detergente'].map((label, i) => ({ userId: uid, label, done: i === 1 })) });
 
   // ── Notificaciones y automatizaciones
   await db.notification.createMany({
