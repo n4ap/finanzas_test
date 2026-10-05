@@ -1,7 +1,7 @@
 // Comprueba que las páginas principales no desbordan horizontalmente en móvil (390 px) y guarda capturas.
 import { BASE, OUT, check, failures, launch, login } from './helpers.mjs';
 
-const ROUTES = (process.env.ROUTES ?? 'dashboard,tasks,calendar,email,news,focus').split(',');
+const ROUTES = (process.env.ROUTES ?? 'dashboard,tasks,calendar,email,news,focus,finance,investments').split(',');
 const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();

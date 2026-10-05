@@ -161,7 +161,7 @@ async function main() {
     ['ocio', ['Cine', 'Restaurante', 'Cervezas', 'Concierto'], 12, 60, 6],
     ['compras', ['Amazon', 'Decathlon', 'Zara'], 15, 90, 3],
   ];
-  for (let m = 0; m < 4; m++) {
+  for (let m = 0; m < 7; m++) {
     const first = new Date(now.getFullYear(), now.getMonth() - m, 1);
     const last = m === 0 ? now.getDate() : new Date(now.getFullYear(), now.getMonth() - m + 1, 0).getDate();
     const d = (n: number) => new Date(first.getFullYear(), first.getMonth(), Math.min(n, last), 10);
@@ -185,6 +185,10 @@ async function main() {
   add(shared.id, day(1), -780, 'vivienda', 'Hipoteca (próximo cargo)', { recurring: true, upcoming: true });
   add(checking.id, day(2), -62, 'suscripciones', 'Seguro del móvil', { upcoming: true });
   add(checking.id, day(8), -310, 'transporte', 'Renovación seguro coche', { upcoming: true });
+  // Cuenta propia de la pareja (privada, no la ve Alex) con algunos movimientos
+  const samAcc = await db.bankAccount.create({ data: { ownerId: partner.id, name: 'Cuenta Sam', kind: 'checking', openingBalance: 2100 } });
+  for (const [dayOff, amount, category, description] of [[-2, -45, 'alimentacion', 'Mercadona'], [-5, -19.9, 'ocio', 'Cine'], [-9, 1900, 'ingresos', 'Nómina']] as const)
+    txs.push({ userId: partner.id, accountId: samAcc.id, date: day(dayOff, 10), amount, category, description });
   await db.transaction.createMany({ data: txs });
   await db.budget.createMany({
     data: [['vivienda', 950], ['alimentacion', 400], ['transporte', 150], ['ocio', 200], ['compras', 150], ['suscripciones', 80], ['viajes', 200], ['otros', 100]].map(([category, monthly]) => ({ userId: uid, category: category as string, monthly: monthly as number })),
@@ -192,16 +196,44 @@ async function main() {
 
   // ── Inversiones
   const portfolio = await db.portfolio.create({ data: { userId: uid, name: 'Cartera principal' } });
-  await db.investment.createMany({
+  const invDefs: [string, string, string, number, number, number, number][] = [
+    ['etf', 'VWCE', 'Vanguard FTSE All-World', 62, 105.2, 118.4, 1.6],
+    ['etf', 'IWDA', 'iShares MSCI World', 40, 78.1, 89.7, 1.4],
+    ['stock', 'AAPL', 'Apple', 15, 150.3, 189.2, 0.5],
+    ['stock', 'ITX', 'Inditex', 50, 31.4, 46.8, 3.2],
+    ['fund', 'IDX500', 'Fondo indexado S&P 500', 120, 24.6, 29.9, 0],
+    ['crypto', 'BTC', 'Bitcoin', 0.08, 41000, 62500, 0],
+    ['crypto', 'ETH', 'Ethereum', 0.9, 2100, 2650, 0],
+  ];
+  const investments = await db.investment.createManyAndReturn({
+    data: invDefs.map(([assetType, symbol, name, quantity, avgCost, currentPrice, dividendYield]) => ({ portfolioId: portfolio.id, assetType, symbol, name, quantity, avgCost, currentPrice, dividendYield })),
+  });
+  // Dividendos cobrados (trimestrales/semestrales) en el último año
+  const bySymbol = new Map(investments.map((i) => [i.symbol, i.id]));
+  const monthsAgo = (m: number) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m, 15, 12));
+  await db.dividend.createMany({
     data: [
-      ['etf', 'VWCE', 'Vanguard FTSE All-World', 62, 105.2, 118.4, 1.6],
-      ['etf', 'IWDA', 'iShares MSCI World', 40, 78.1, 89.7, 1.4],
-      ['stock', 'AAPL', 'Apple', 15, 150.3, 189.2, 0.5],
-      ['stock', 'ITX', 'Inditex', 50, 31.4, 46.8, 3.2],
-      ['fund', 'IDX500', 'Fondo indexado S&P 500', 120, 24.6, 29.9, 0],
-      ['crypto', 'BTC', 'Bitcoin', 0.08, 41000, 62500, 0],
-      ['crypto', 'ETH', 'Ethereum', 0.9, 2100, 2650, 0],
-    ].map(([assetType, symbol, name, quantity, avgCost, currentPrice, dividendYield]) => ({ portfolioId: portfolio.id, assetType: assetType as string, symbol: symbol as string, name: name as string, quantity: quantity as number, avgCost: avgCost as number, currentPrice: currentPrice as number, dividendYield: dividendYield as number })),
+      ...[1, 4, 7, 10].map((m) => ({ investmentId: bySymbol.get('VWCE')!, date: monthsAgo(m), amount: 29.3 })),
+      ...[2, 5, 8, 11].map((m) => ({ investmentId: bySymbol.get('IWDA')!, date: monthsAgo(m), amount: 12.5 })),
+      ...[2, 5, 8, 11].map((m) => ({ investmentId: bySymbol.get('AAPL')!, date: monthsAgo(m), amount: 3.6 })),
+      ...[3, 9].map((m) => ({ investmentId: bySymbol.get('ITX')!, date: monthsAgo(m), amount: 37.4 })),
+    ],
+  });
+  // Evolución de la cartera: instantáneas semanales del último año (termina exactamente en el valor actual)
+  const V0 = invDefs.reduce((a, [, , , q, , p]) => a + q * p, 0);
+  const C0 = invDefs.reduce((a, [, , , q, c]) => a + q * c, 0);
+  await db.portfolioSnapshot.createMany({
+    data: Array.from({ length: 53 }, (_, i) => {
+      const w = 52 - i; // semanas atrás
+      const progress = 1 - w / 52;
+      const noise = w === 0 ? 0 : (rnd() - 0.5) * 0.04;
+      return {
+        portfolioId: portfolio.id,
+        date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - w * 7, 12)),
+        value: Math.round(V0 * (0.8 + 0.2 * progress + noise) * 100) / 100,
+        cost: Math.round(C0 * (0.84 + 0.16 * progress) * 100) / 100,
+      };
+    }),
   });
 
   // ── Salud

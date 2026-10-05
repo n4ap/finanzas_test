@@ -14,7 +14,7 @@ npm run dev                   # http://localhost:3000
 Usuario demo: `demo@lifedashboard.dev` / `demo-password-123`
 
 ## Scripts
-`npm test` (vitest) · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run e2e` (reinicia datos demo, levanta la app compilada y ejecuta `e2e/smoke.mjs`, `phase2.mjs` y `mobile.mjs` con Playwright; requiere `npm run build` previo y Chromium, `CHROMIUM` configurable).
+`npm test` (vitest; los tests de integración usan PostgreSQL real: crea una base `lifedash_test` con el mismo usuario, o define `TEST_DATABASE_URL`. El setup solo ejecuta un `db push` normal y se niega a tocar bases cuyo nombre no contenga «test») · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run e2e` (reinicia datos demo, levanta la app compilada y ejecuta `e2e/smoke.mjs`, `phase2.mjs` y `mobile.mjs` con Playwright; requiere `npm run build` previo y Chromium, `CHROMIUM` configurable).
 
 ## Arquitectura
 - `src/server/providers/` — interfaces `EmailProvider`, `CalendarProvider`, `NewsProvider`, `FinanceProvider`, `AIProvider` + registro de adapters. La UI no depende de ningún proveedor concreto.
@@ -29,3 +29,8 @@ Usuario demo: `demo@lifedashboard.dev` / `demo-password-123`
 - **Fase 2** — Tareas (lista, Kanban con arrastrar y soltar, calendario; subtareas, recurrencia, recordatorios), Calendario (día/semana/mes/agenda, CRUD, búsqueda, varios calendarios), Email (carpetas, análisis, resumen, fecha límite, tareas extraídas, borradores) y Noticias («Lo importante de hoy» ≤5, categorías priorizables).
 - Los emails **nunca se envían** desde la app: solo se generan borradores (`mailto:`/copiar).
 - Resúmenes y análisis de email/noticias son heurísticas locales deterministas (`src/server/email-ai.ts`, `news-rank.ts`); un `AIProvider` real los sustituirá en la Fase 6.
+- **Fase 3** — Finanzas (`/finance`): resumen con KPIs y 4 gráficos, movimientos con filtros y paginación, presupuestos por categoría con avisos al 80 %/100 %, cuentas manuales y **compartidas entre dos usuarios**, **importación CSV** (vista previa, detección de duplicados, mapeo de columnas), exportación CSV segura e historial de cambios. Inversiones (`/investments`): valor, rentabilidad, evolución, distribución por tipo y dividendos.
+- Dinero siempre en céntimos enteros (`src/lib/finance.ts`); todo cambio financiero se audita en la misma transacción de BD (`AuditLog`, con quién y valor anterior).
+- Lógica de negocio en `src/server/finance/` (independiente de cookies, testeada contra BD real); las *server actions* son envoltorios finos con límites de frecuencia.
+- Precios de inversión introducidos a mano; no hay conexión con bancos, brokers ni mercados. Un `MarketDataProvider` podrá añadirse en la Fase 6.
+- Esquema gestionado con `prisma db push` en desarrollo; antes de producción hay que pasar a migraciones (`prisma migrate`).

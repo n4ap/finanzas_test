@@ -14,6 +14,11 @@
   --success: 152 60% 36%;
   --warning: 32 92% 44%;
   --danger: 0 72% 51%;
+  /* Gráficos (paleta validada: categórica 1-4, divergente azul↔rojo, estado) */
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --div-pos: #2a78d6; --div-neg: #e34948;
+  --meter-fill: #2a78d6; --meter-track: #cde2fb; --meter-warn: #fab219; --meter-danger: #d03b3b;
+  --chart-surface: #fcfcfb; --chart-grid: #e1e0d9; --chart-axis: #c3c2b7; --chart-muted: #898781;
 }
 .dark {
   --background: 226 24% 8%;
@@ -27,6 +32,10 @@
   --success: 152 55% 50%;
   --warning: 36 92% 58%;
   --danger: 0 80% 66%;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --div-pos: #3987e5; --div-neg: #e66767;
+  --meter-fill: #3987e5; --meter-track: #0d366b; --meter-warn: #fab219; --meter-danger: #d03b3b;
+  --chart-surface: #1a1a19; --chart-grid: #2c2c2a; --chart-axis: #383835; --chart-muted: #898781;
 }
 
 @layer base {

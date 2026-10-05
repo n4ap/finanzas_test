@@ -64,4 +64,13 @@ describe('buildPriorities', () => {
     expect(items[0]?.severity).toBe('urgent');
     expect(items.map((i) => i.kind)).toEqual(expect.arrayContaining(['task', 'payment', 'email']));
   });
+
+  it('avisa de presupuestos superados (importante) y casi agotados (aviso), ignorando los que van bien', () => {
+    const items = buildPriorities({
+      now, tasks: [], emails: [], events: [], upcomingPayments: [], spend: [],
+      budgets: [{ category: 'ocio', budget: 200, spent: 250, status: 'over' }, { category: 'compras', budget: 100, spent: 85, status: 'warn' }, { category: 'viajes', budget: 100, spent: 10, status: 'ok' }],
+    });
+    expect(items.map((i) => [i.id, i.severity])).toEqual([['budget-ocio', 'important'], ['budget-compras', 'info']]);
+    expect(items[0]!.href).toBe('/finance?tab=presupuestos');
+  });
 });

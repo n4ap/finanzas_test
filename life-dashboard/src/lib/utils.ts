@@ -21,7 +21,7 @@ export const formatLongDate = (d: Date) => {
 };
 export const formatTime = (d: Date) => new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' }).format(d);
 export const formatEUR = (n: number, digits = 0) =>
-  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: digits, minimumFractionDigits: digits }).format(n);
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: digits, minimumFractionDigits: digits, useGrouping: 'always' }).format(n);
 
 export function relativeDay(d: Date, now = new Date()): string {
   const diff = Math.round((startOfDay(d).getTime() - startOfDay(now).getTime()) / 86_400_000);

@@ -1,7 +1,9 @@
 import { Bell, Bot, Dumbbell, LineChart, Plane, Wallet } from 'lucide-react';
 import Link from 'next/link';
-import { IncomeExpenseBars, Sparkline } from '@/components/charts';
+import { Sparkline } from '@/components/charts';
+import { ColumnsChart } from '@/components/charts/columns-chart';
 import { Badge, EmptyState } from '@/components/ui/primitives';
+import { categoryLabel } from '@/lib/finance';
 import { formatEUR } from '@/lib/utils';
 import type { DashboardData } from '@/server/dashboard-data';
 import { Row, WidgetFrame } from './frame';
@@ -12,6 +14,8 @@ const Stat = ({ label, value, tone }: { label: string; value: string; tone?: 'su
 
 export function FinanceWidget({ d }: { d: DashboardData }) {
   const m = d.finance.month;
+  const over = d.finance.budgets.filter((b) => b.status === 'over');
+  const warn = d.finance.budgets.filter((b) => b.status === 'warn');
   return (
     <WidgetFrame title="Finanzas" icon={Wallet} href="/finance">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -20,7 +24,14 @@ export function FinanceWidget({ d }: { d: DashboardData }) {
         <Stat label="Ahorro" value={formatEUR(m.saving)} tone={m.saving >= 0 ? 'success' : 'danger'} />
         <Stat label="Patrimonio" value={formatEUR(d.finance.netWorth)} />
       </div>
-      <div className="mt-3"><IncomeExpenseBars data={d.finance.series} /></div>
+      {(over.length > 0 || warn.length > 0) && (
+        <Link href="/finance?tab=presupuestos" className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+          {over.length > 0 && <Badge tone="urgent">{over.length} presupuesto{over.length > 1 ? 's' : ''} superado{over.length > 1 ? 's' : ''}: {over.map((b) => categoryLabel(b.category)).join(', ')}</Badge>}
+          {warn.length > 0 && <Badge tone="important">{warn.length} cerca del límite</Badge>}
+        </Link>
+      )}
+      <ul className="mt-3 flex gap-4 text-xs text-muted-foreground" aria-label="Leyenda"><li className="flex items-center gap-1.5"><span aria-hidden className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--series-1)' }} />Ingresos</li><li className="flex items-center gap-1.5"><span aria-hidden className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--series-2)' }} />Gastos</li></ul>
+      <ColumnsChart data={d.finance.series.map((m) => ({ ...m, label: m.month }))} series={[{ key: 'income', label: 'Ingresos', color: 'var(--series-1)' }, { key: 'expenses', label: 'Gastos', color: 'var(--series-2)' }]} height={150} ariaLabel="Ingresos y gastos de los últimos meses" />
     </WidgetFrame>
   );
 }

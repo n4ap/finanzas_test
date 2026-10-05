@@ -3,20 +3,23 @@ import { db } from '@/lib/db';
 import { addDays, endOfDay, startOfDay } from '@/lib/utils';
 import { buildPriorities, recommendNextAction, type EventLite, type TaskLite } from './insights';
 import { topOfToday } from './news-rank';
-import { monthSummary, monthlySeries, portfolioStats } from './metrics';
+import { accessibleAccountsWhere } from './finance/core';
+import { budgetUsage, monthSummary, monthlySeries, portfolioStats } from './metrics';
+import { sumMoney } from '@/lib/finance';
 
 /** Carga y deriva todo lo que necesita el dashboard. Cada consulta está acotada por userId. */
 export async function getDashboardData(userId: string, now = new Date()) {
   const prefs = await db.user.findUnique({ where: { id: userId }, select: { preferences: true } });
   const followedNews = ((prefs?.preferences as { followedNews?: string[] } | null)?.followedNews ?? []).filter((f) => typeof f === 'string');
   const dayStart = startOfDay(now);
-  const [tasks, events, emails, news, txs, accounts, investments, metrics, workouts, projects, trips, notifications] = await Promise.all([
+  const [tasks, events, emails, news, txs, accounts, budgets, investments, metrics, workouts, projects, trips, notifications] = await Promise.all([
     db.task.findMany({ where: { userId, parentId: null }, include: { project: { select: { name: true } } }, orderBy: [{ priority: 'asc' }, { dueDate: 'asc' }] }),
     db.event.findMany({ where: { calendar: { userId }, startsAt: { gte: addDays(dayStart, -1), lte: endOfDay(addDays(now, 14)) } }, include: { calendar: { select: { name: true, color: true } } }, orderBy: { startsAt: 'asc' } }),
     db.email.findMany({ where: { userId, folder: 'inbox' }, orderBy: { receivedAt: 'desc' }, take: 30 }),
     db.newsArticle.findMany({ where: { userId }, orderBy: [{ importance: 'desc' }, { publishedAt: 'desc' }], take: 20 }),
-    db.transaction.findMany({ where: { userId, date: { gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) } } }),
-    db.bankAccount.findMany({ where: { ownerId: userId }, include: { transactions: { where: { upcoming: false }, select: { amount: true } } } }),
+    db.transaction.findMany({ where: { account: accessibleAccountsWhere(userId), date: { gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) } } }),
+    db.bankAccount.findMany({ where: accessibleAccountsWhere(userId), include: { transactions: { where: { upcoming: false }, select: { amount: true } } } }),
+    db.budget.findMany({ where: { userId } }),
     db.investment.findMany({ where: { portfolio: { userId } } }),
     db.healthMetric.findMany({ where: { userId, date: { gte: addDays(dayStart, -30) } }, orderBy: { date: 'asc' } }),
     db.workout.findMany({ where: { userId, date: { gte: addDays(dayStart, -30), lte: endOfDay(addDays(now, 7)) } }, orderBy: { date: 'asc' } }),
@@ -34,7 +37,9 @@ export async function getDashboardData(userId: string, now = new Date()) {
   const todayEvents = events.filter((e) => e.startsAt >= dayStart && e.startsAt <= endOfDay(now));
 
   const positions = portfolioStats(investments.map((i) => ({ symbol: i.symbol, assetType: i.assetType, quantity: num(i.quantity), avgCost: num(i.avgCost), currentPrice: num(i.currentPrice), dividendYield: num(i.dividendYield) })));
-  const cash = accounts.reduce((a, acc) => a + num(acc.openingBalance) + acc.transactions.reduce((s, t) => s + num(t.amount), 0), 0);
+  const cash = sumMoney(accounts.flatMap((acc) => [num(acc.openingBalance), ...acc.transactions.map((t) => num(t.amount))]));
+  const month = monthSummary(paid, now);
+  const budgetRows = budgetUsage(budgets.map((b) => ({ category: b.category, monthly: num(b.monthly) })), month.byCategory);
 
   const series = (kind: string) => metrics.filter((m) => m.kind === kind).map((m) => ({ date: m.date, value: m.value }));
 
@@ -44,11 +49,11 @@ export async function getDashboardData(userId: string, now = new Date()) {
     topNews: topOfToday(news, followedNews, now),
     upcomingPayments,
     priorities: buildPriorities({
-      now, tasks: taskLite, events: eventLite, upcomingPayments, spend: paid,
+      now, tasks: taskLite, events: eventLite, upcomingPayments, spend: paid, budgets: budgetRows,
       emails: emails.map((e) => ({ id: e.id, subject: e.subject, fromName: e.fromName, needsReply: e.needsReply, replied: e.replied, deadline: e.deadline, important: e.important })),
     }),
     nextAction: recommendNextAction({ now, tasks: taskLite, events: eventLite }),
-    finance: { month: monthSummary(paid, now), series: monthlySeries(paid, now), cash, netWorth: cash + positions.value },
+    finance: { month, series: monthlySeries(paid, now), cash, netWorth: sumMoney([cash, positions.value]), budgets: budgetRows },
     positions,
     health: { weight: series('weight'), steps: series('steps'), sleep: series('sleep'), workouts },
     projects: projects.map((p) => ({ ...p, progress: p.tasks.length ? p.tasks.filter((t) => t.status === 'done').length / p.tasks.length : 0 })),

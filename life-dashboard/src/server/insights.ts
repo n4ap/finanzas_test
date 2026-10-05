@@ -55,11 +55,12 @@ export function unusualSpending(spend: SpendLite[], now: Date): { category: stri
   return res.sort((a, b) => b.current - b.average - (a.current - a.average));
 }
 
-export interface PriorityInput { now: Date; tasks: TaskLite[]; emails: EmailLite[]; events: EventLite[]; upcomingPayments: PaymentLite[]; spend: SpendLite[] }
+export interface BudgetLite { category: string; budget: number; spent: number; status: 'ok' | 'warn' | 'over' }
+export interface PriorityInput { now: Date; tasks: TaskLite[]; emails: EmailLite[]; events: EventLite[]; upcomingPayments: PaymentLite[]; spend: SpendLite[]; budgets?: BudgetLite[] }
 
 const rank: Record<Severity, number> = { urgent: 0, important: 1, info: 2 };
 
-export function buildPriorities({ now, tasks, emails, events, upcomingPayments, spend }: PriorityInput): PriorityItem[] {
+export function buildPriorities({ now, tasks, emails, events, upcomingPayments, spend, budgets = [] }: PriorityInput): PriorityItem[] {
   const items: PriorityItem[] = [];
 
   for (const t of tasks.filter((t) => isOverdue(t, now))) {
@@ -84,6 +85,9 @@ export function buildPriorities({ now, tasks, emails, events, upcomingPayments, 
   }
   for (const u of unusualSpending(spend, now)) {
     items.push({ id: `spend-${u.category}`, kind: 'finance', severity: 'important', title: `Gasto inusual en ${u.category}`, detail: `${u.current.toFixed(0)} € este mes (media ${u.average.toFixed(0)} €)`, href: '/finance' });
+  }
+  for (const b of budgets.filter((b) => b.status !== 'ok')) {
+    items.push({ id: `budget-${b.category}`, kind: 'finance', severity: b.status === 'over' ? 'important' : 'info', title: b.status === 'over' ? `Presupuesto de ${b.category} superado` : `Presupuesto de ${b.category} casi agotado`, detail: `${b.spent.toFixed(0)} € de ${b.budget.toFixed(0)} € este mes`, href: '/finance?tab=presupuestos' });
   }
   for (const e of events.filter((e) => e.important && e.startsAt > now && e.startsAt.getTime() - now.getTime() < 2 * DAY)) {
     items.push({ id: `evt-${e.id}`, kind: 'event', severity: 'important', title: e.title, detail: 'Evento importante próximo', href: '/calendar' });
