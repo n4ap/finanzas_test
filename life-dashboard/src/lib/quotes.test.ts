@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fxSymbol, normalizeCurrency, parseYahooChart, toEur, yahooCandidates } from './quotes';
+import { fxSymbol, isValidIsin, normalizeCurrency, parseYahooChart, parseYahooSearch, toEur, yahooCandidates } from './quotes';
 
 describe('yahooCandidates', () => {
   it('cripto: pareja en euros', () => { expect(yahooCandidates('crypto', 'btc')).toEqual(['BTC-EUR']); expect(yahooCandidates('crypto', 'ETH-USD')).toEqual(['ETH-USD']); });
@@ -20,4 +20,17 @@ describe('divisas', () => {
   it('peniques londinenses a libras', () => expect(normalizeCurrency({ price: 250, currency: 'GBp' })).toEqual({ price: 2.5, currency: 'GBP' }));
   it('convierte a euros con 4 decimales', () => expect(toEur({ price: 100, currency: 'USD' }, 0.9234567)).toBe(92.3457));
   it('símbolo de cambio', () => expect(fxSymbol('usd')).toBe('USDEUR=X'));
+});
+
+describe('isValidIsin', () => {
+  it.each(['IE00BK5BQT80', 'US0378331005', 'ES0113900J37', 'ie00bk5bqt80'])('acepta %s', (i) => expect(isValidIsin(i)).toBe(true));
+  it.each(['IE00BK5BQT81', 'US037833100', '1234567890AB', 'IE00BK5BQT8', ''])('rechaza %s', (i) => expect(isValidIsin(i)).toBe(false));
+});
+
+describe('parseYahooSearch', () => {
+  it('devuelve tickers de fondos/ETF/acciones sin duplicados y descarta el resto', () => {
+    const j = { quotes: [{ symbol: 'VWCE.DE', quoteType: 'ETF' }, { symbol: 'VWCE.DE', quoteType: 'ETF' }, { symbol: '0P0001', quoteType: 'MUTUALFUND' }, { symbol: 'XYZ=F', quoteType: 'FUTURE' }, { symbol: 'bad symbol', quoteType: 'ETF' }] };
+    expect(parseYahooSearch(j)).toEqual(['VWCE.DE', '0P0001']);
+  });
+  it.each([null, {}, { quotes: 'x' }])('entrada inútil %#', (j) => expect(parseYahooSearch(j)).toEqual([]));
 });

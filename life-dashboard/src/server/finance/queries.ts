@@ -97,7 +97,7 @@ export async function getInvestmentsOverview(userId: string, now = new Date()) {
   const stats = portfolioStats(investments.map((i) => ({ symbol: i.symbol, assetType: i.assetType, quantity: toNumber(i.quantity), avgCost: toNumber(i.avgCost), currentPrice: toNumber(i.currentPrice), dividendYield: toNumber(i.dividendYield) })));
   const received12 = dividendsByMonth(dividends.map((d) => ({ date: d.date, amount: toNumber(d.amount) })), now, 12);
   return {
-    positions: investments.map((i, idx) => ({ id: i.id, assetType: i.assetType, symbol: i.symbol, name: i.name, quantity: toNumber(i.quantity), avgCost: toNumber(i.avgCost), currentPrice: toNumber(i.currentPrice), dividendYield: toNumber(i.dividendYield), value: stats.rows[idx]!.value, pnl: stats.rows[idx]!.pnl, pnlPct: stats.rows[idx]!.pnlPct, weight: stats.value > 0 ? stats.rows[idx]!.value / stats.value : 0, annualDividend: stats.rows[idx]!.annualDividend })),
+    positions: investments.map((i, idx) => ({ id: i.id, assetType: i.assetType, symbol: i.symbol, name: i.name, quantity: toNumber(i.quantity), avgCost: toNumber(i.avgCost), currentPrice: toNumber(i.currentPrice), dividendYield: toNumber(i.dividendYield), isin: i.isin, value: stats.rows[idx]!.value, pnl: stats.rows[idx]!.pnl, pnlPct: stats.rows[idx]!.pnlPct, weight: stats.value > 0 ? stats.rows[idx]!.value / stats.value : 0, annualDividend: stats.rows[idx]!.annualDividend })),
     totals: { value: stats.value, cost: stats.cost, pnl: stats.pnl, pnlPct: stats.pnlPct, annualDividends: stats.annualDividends },
     allocation: stats.allocation,
     evolution: evolutionSeries(snaps.map((s) => ({ date: s.date, value: toNumber(s.value), cost: toNumber(s.cost) }))),

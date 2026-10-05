@@ -317,6 +317,8 @@ model Investment {
   avgCost       Decimal    @db.Decimal(14, 4)
   currentPrice  Decimal    @db.Decimal(14, 4)
   dividendYield Decimal    @default(0) @db.Decimal(6, 3)
+  isin          String? // opcional: ayuda a encontrar el precio de fondos y ETF
+  quoteSymbol   String? // ticker de mercado resuelto a partir del ISIN (caché)
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   portfolio     Portfolio  @relation(fields: [portfolioId], references: [id], onDelete: Cascade)

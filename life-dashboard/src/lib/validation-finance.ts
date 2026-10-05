@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ACCOUNT_KINDS, ALL_CATEGORIES, ASSET_TYPES, EXPENSE_IDS, INCOME_CATEGORY, toCents } from './finance';
+import { isValidIsin } from './quotes';
 
 const money = (max = 1_000_000_000) =>
   z.coerce.number().finite().refine((n) => Math.abs(n) <= max, 'Importe demasiado grande').refine((n) => Math.abs(toCents(n) - n * 100) < 1e-6, 'Máximo 2 decimales');
@@ -42,6 +43,7 @@ export const investmentSchema = z.object({
   avgCost: z.coerce.number().finite().min(0).max(1e9),
   currentPrice: z.coerce.number().finite().min(0).max(1e9),
   dividendYield: z.coerce.number().finite().min(0).max(100).default(0),
+  isin: z.string().trim().toUpperCase().optional().transform((v) => v || null).refine((v) => v === null || isValidIsin(v), 'ISIN no válido (12 caracteres, p. ej. IE00BK5BQT80)'),
 });
 export const dividendSchema = z.object({ investmentId: cuid, date: dateOnly, amount: money(1e8).refine((n) => n > 0, 'El dividendo debe ser positivo') });
 export const priceSchema = z.object({ investmentId: cuid, currentPrice: z.coerce.number().finite().min(0).max(1e9) });

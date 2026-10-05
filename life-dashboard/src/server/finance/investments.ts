@@ -40,7 +40,8 @@ export async function updateInvestment(userId: string, id: string, input: unknow
   if (!p.success) return fail(issue(p.error));
   return db.$transaction(async (tx) => {
     const before = await requireInvestment(tx, userId, id);
-    const after = await tx.investment.update({ where: { id }, data: p.data });
+    const changed = p.data.isin !== before.isin || p.data.symbol !== before.symbol;
+    const after = await tx.investment.update({ where: { id }, data: { ...p.data, ...(changed ? { quoteSymbol: null } : {}) } });
     await audit(tx, { userId, entity: 'Investment', entityId: id, action: 'update', before, after });
     await recordSnapshot(tx, before.portfolioId);
     return id;

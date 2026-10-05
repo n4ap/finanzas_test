@@ -5,7 +5,7 @@ import { Button, Field, Input, Select } from '@/components/ui/primitives';
 import { ASSET_TYPES } from '@/lib/finance';
 import { addDividendAction, createInvestmentAction, deleteInvestmentAction, updateInvestmentAction } from '@/server/actions/finance';
 
-export interface PositionDTO { id: string; assetType: string; symbol: string; name: string; quantity: number; avgCost: number; currentPrice: number; dividendYield: number }
+export interface PositionDTO { id: string; assetType: string; symbol: string; name: string; quantity: number; avgCost: number; currentPrice: number; dividendYield: number; isin?: string | null }
 
 const num = (v: FormDataEntryValue | null) => String(v ?? '').replace(',', '.');
 
@@ -18,7 +18,7 @@ export function PositionForm({ open, onClose, position }: { open: boolean; onClo
       <form key={position?.id ?? 'new'} className="space-y-3" onSubmit={(e) => {
         e.preventDefault();
         const f = new FormData(e.currentTarget);
-        const payload = { assetType: f.get('assetType'), symbol: f.get('symbol'), name: f.get('name'), quantity: num(f.get('quantity')), avgCost: num(f.get('avgCost')), currentPrice: num(f.get('currentPrice')), dividendYield: num(f.get('dividendYield')) || '0' };
+        const payload = { assetType: f.get('assetType'), symbol: f.get('symbol'), name: f.get('name'), quantity: num(f.get('quantity')), avgCost: num(f.get('avgCost')), currentPrice: num(f.get('currentPrice')), dividendYield: num(f.get('dividendYield')) || '0', isin: f.get('isin') };
         start(async () => { const r = editing ? await updateInvestmentAction(position!.id, payload) : await createInvestmentAction(payload); if (r.ok) { setError(null); onClose(); } else setError(r.error); });
       }}>
         <div className="grid grid-cols-2 gap-3">
@@ -26,13 +26,14 @@ export function PositionForm({ open, onClose, position }: { open: boolean; onClo
           <Field label="Símbolo"><Input name="symbol" required maxLength={20} defaultValue={position?.symbol} placeholder="VWCE" autoFocus /></Field>
         </div>
         <Field label="Nombre"><Input name="name" required maxLength={100} defaultValue={position?.name} /></Field>
+        <Field label="ISIN (opcional, para fondos y ETF)"><Input name="isin" maxLength={12} defaultValue={position?.isin ?? ''} placeholder="IE00BK5BQT80" autoComplete="off" spellCheck={false} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cantidad"><Input name="quantity" inputMode="decimal" required defaultValue={position?.quantity} /></Field>
           <Field label="Coste medio (€/ud.)"><Input name="avgCost" inputMode="decimal" required defaultValue={position?.avgCost} /></Field>
           <Field label="Precio actual (€/ud.)"><Input name="currentPrice" inputMode="decimal" required defaultValue={position?.currentPrice} /></Field>
           <Field label="Rentab. por dividendo (%/año)"><Input name="dividendYield" inputMode="decimal" defaultValue={position?.dividendYield ?? 0} /></Field>
         </div>
-        <p className="text-xs text-muted-foreground">Los precios se introducen a mano. No hay conexión con brokers ni con mercados.</p>
+        <p className="text-xs text-muted-foreground">Puedes escribir el precio a mano o usar «Actualizar precios». Con el ISIN, la app busca el fondo o ETF en Yahoo Finance.</p>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex justify-between pt-2">
           {editing ? <Button type="button" variant="ghost" className="text-danger" disabled={pending} onClick={() => { if (confirm(`¿Eliminar ${position!.symbol} y sus dividendos registrados?`)) start(async () => { const r = await deleteInvestmentAction(position!.id); if (r.ok) onClose(); else setError(r.error); }); }}>Eliminar</Button> : <span />}

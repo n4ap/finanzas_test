@@ -42,7 +42,7 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
     emails: emails.map((e) => ({ folder: e.folder as 'inbox', fromName: e.fromName, fromEmail: e.fromEmail, toEmails: e.toEmails, subject: e.subject, body: e.body, snippet: e.snippet, receivedAt: iso(e.receivedAt), read: e.read, starred: e.starred, important: e.important, needsReply: e.needsReply, replied: e.replied, deadline: optIso(e.deadline), category: e.category, summary: e.summary })),
     bankAccounts: accounts.map((a) => ({ name: a.name, kind: a.kind as 'checking', currency: a.currency, openingBalance: dec(a.openingBalance)!, transactions: a.transactions.map((t) => ({ date: iso(t.date), amount: dec(t.amount)!, category: t.category, description: t.description, merchant: t.merchant, recurring: t.recurring, upcoming: t.upcoming, source: t.source as 'manual' })) })),
     budgets: budgets.map((b) => ({ category: b.category, monthly: dec(b.monthly)! })),
-    portfolios: portfolios.map((p) => ({ name: p.name, currency: p.currency, investments: p.investments.map((i) => ({ assetType: i.assetType as 'stock', symbol: i.symbol, name: i.name, quantity: dec(i.quantity)!, avgCost: dec(i.avgCost)!, currentPrice: dec(i.currentPrice)!, dividendYield: dec(i.dividendYield)!, dividends: i.dividends.map((d) => ({ date: iso(d.date), amount: dec(d.amount)! })) })), snapshots: p.snapshots.map((s) => ({ date: iso(s.date), value: dec(s.value)!, cost: dec(s.cost)! })) })),
+    portfolios: portfolios.map((p) => ({ name: p.name, currency: p.currency, investments: p.investments.map((i) => ({ assetType: i.assetType as 'stock', symbol: i.symbol, name: i.name, quantity: dec(i.quantity)!, avgCost: dec(i.avgCost)!, currentPrice: dec(i.currentPrice)!, dividendYield: dec(i.dividendYield)!, isin: i.isin, dividends: i.dividends.map((d) => ({ date: iso(d.date), amount: dec(d.amount)! })) })), snapshots: p.snapshots.map((s) => ({ date: iso(s.date), value: dec(s.value)!, cost: dec(s.cost)! })) })),
     workouts: workouts.map((w) => ({ kind: w.kind as 'gym', title: w.title, date: iso(w.date), minutes: w.minutes, calories: w.calories, notes: w.notes, planned: w.planned })),
     healthMetrics: metrics.map((m) => ({ kind: m.kind as 'weight', date: iso(m.date), value: m.value, source: m.source })),
     healthGoals: goals.map((g) => ({ kind: g.kind as 'steps', target: g.target })),
@@ -114,7 +114,7 @@ export async function importUserData(userId: string, raw: string): Promise<Impor
     for (const p of f.portfolios) {
       const port = await tx.portfolio.create({ data: { userId, name: p.name, currency: p.currency } });
       for (const i of p.investments) {
-        const inv = await tx.investment.create({ data: { portfolioId: port.id, assetType: i.assetType, symbol: i.symbol, name: i.name, quantity: i.quantity, avgCost: i.avgCost, currentPrice: i.currentPrice, dividendYield: i.dividendYield } });
+        const inv = await tx.investment.create({ data: { portfolioId: port.id, assetType: i.assetType, symbol: i.symbol, name: i.name, quantity: i.quantity, avgCost: i.avgCost, currentPrice: i.currentPrice, dividendYield: i.dividendYield, isin: i.isin ?? null } });
         if (i.dividends.length) await tx.dividend.createMany({ data: i.dividends.map((x) => ({ investmentId: inv.id, date: d(x.date), amount: x.amount })) });
       }
       if (p.snapshots.length) await tx.portfolioSnapshot.createMany({ data: p.snapshots.map((s) => ({ portfolioId: port.id, date: d(s.date), value: s.value, cost: s.cost })), skipDuplicates: true });

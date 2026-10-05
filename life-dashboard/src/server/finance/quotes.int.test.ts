@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
-import { createInvestment } from './investments';
+import { createInvestment, updateInvestment } from './investments';
 import { refreshPrices, type TextFetcher } from './quotes';
 
 let alice: string, bob: string;
 const chartJson = (price: number, currency: string) => JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: price, currency } }] } });
 /** Mercado simulado: ticker → [precio, divisa]. Lo demás responde 404 (como Yahoo con un ticker inexistente). */
-const market = (m: Record<string, [number, string]>, calls: string[] = []): TextFetcher => async (url) => {
+const market = (m: Record<string, [number, string]>, calls: string[] = [], search: Record<string, string[]> = {}): TextFetcher => async (url) => {
+  const sq = /search\?q=([A-Z0-9]+)/.exec(url);
+  if (sq) { calls.push(`search:${sq[1]}`); return { text: JSON.stringify({ quotes: (search[sq[1]!] ?? []).map((symbol) => ({ symbol, quoteType: 'ETF' })) }) }; }
   const t = decodeURIComponent(/chart\/([^?]+)/.exec(url)![1]!);
   calls.push(t);
   const hit = m[t];
@@ -73,5 +75,29 @@ describe('refreshPrices', () => {
   });
   it('sin posiciones devuelve vacío', async () => {
     expect(await refreshPrices(alice, market({}))).toMatchObject({ updated: [], failed: [] });
+  });
+
+  it('con ISIN busca el fondo, prefiere el ticker en euros y lo recuerda', async () => {
+    const id = await createInvestment(alice, pos('MIFONDO', { assetType: 'fund', isin: 'IE00BK5BQT80' }));
+    const calls: string[] = [];
+    const m = market({ VWRA: [140, 'USD'], 'VWCE.DE': [120.5, 'EUR'], 'USDEUR=X': [0.9, 'EUR'] }, calls, { IE00BK5BQT80: ['VWRA', 'VWCE.DE'] });
+    const r = await refreshPrices(alice, m);
+    expect(r.updated[0]).toMatchObject({ symbol: 'MIFONDO', ticker: 'VWCE.DE', price: 120.5 });
+    expect((await db.investment.findUniqueOrThrow({ where: { id } })).quoteSymbol).toBe('VWCE.DE');
+    calls.length = 0;
+    await refreshPrices(alice, m);
+    expect(calls).not.toContain('search:IE00BK5BQT80'); // ya no vuelve a buscar
+  });
+  it('si cambia el ISIN o el símbolo se olvida el ticker guardado', async () => {
+    const id = await createInvestment(alice, pos('MIFONDO', { assetType: 'fund', isin: 'IE00BK5BQT80' }));
+    await db.investment.update({ where: { id }, data: { quoteSymbol: 'VIEJO' } });
+    await updateInvestment(alice, id, pos('MIFONDO', { assetType: 'fund', isin: 'US0378331005' }));
+    expect((await db.investment.findUniqueOrThrow({ where: { id } })).quoteSymbol).toBeNull();
+    expect((await db.investment.findUniqueOrThrow({ where: { id } })).isin).toBe('US0378331005');
+  });
+  it('rechaza un ISIN con dígito de control incorrecto y acepta vacío', async () => {
+    await expect(createInvestment(alice, pos('X', { isin: 'IE00BK5BQT81' }))).rejects.toThrow(/ISIN/);
+    const id = await createInvestment(alice, pos('Y', { isin: '' }));
+    expect((await db.investment.findUniqueOrThrow({ where: { id } })).isin).toBeNull();
   });
 });
