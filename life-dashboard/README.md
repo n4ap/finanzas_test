@@ -25,6 +25,15 @@ Para uso diario (más rápido y como producción): `npm run build && npm start`.
 
 Usuario demo: `demo@lifedashboard.dev` / `demo-password-123`
 
+### Windows: doble clic
+Tras la primera instalación (pasos de arriba, con `npx prisma db push` y `npx tsx prisma/seed.ts` si no quieres borrar nada):
+- **`Crear acceso directo.bat`** (una vez): pone el icono «Life Dashboard» en el escritorio.
+- **`Iniciar.bat`** / icono: arranca Docker Desktop si hace falta, la base `lifedash-pg`, guarda la copia SQL del día en `backups/base-de-datos/` (14 últimas), compila si el código cambió (aplica el esquema con `db push` **sin aceptar pérdida de datos**) y abre el navegador. Cerrar su ventana apaga la app.
+- **`Actualizar.bat`**: `git pull` y lo mismo que «Iniciar» (cierra antes la ventana de la app).
+
+### Tareas automáticas
+Mientras el servidor está en marcha, un planificador interno (`src/instrumentation.ts`) hace cada 30 minutos lo mismo que `POST /api/automations/run`: sincroniza calendarios y feeds, evalúa automatizaciones y, **una vez al día por usuario** (según su zona horaria), actualiza los precios de inversiones y guarda una copia JSON de sus datos en `backups/<email>/` (14 últimas; `BACKUP_DIR` para cambiar la carpeta u `off`). La tabla `JobRun` evita repetir tareas diarias. `SCHEDULER=off` lo desactiva (p. ej. con varias instancias y un cron externo). Las copias se restauran con *Ajustes → Datos → Importar*.
+
 ## Scripts
 `npm test` (vitest; los tests de integración usan PostgreSQL real: crea una base `lifedash_test` con el mismo usuario, o define `TEST_DATABASE_URL`. El setup solo ejecuta un `db push` normal y se niega a tocar bases cuyo nombre no contenga «test») · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run e2e` (reinicia datos demo, levanta la app compilada y ejecuta `e2e/smoke.mjs`, `phase2.mjs` y `mobile.mjs` con Playwright; requiere `npm run build` previo y Chromium, `CHROMIUM` configurable).
 

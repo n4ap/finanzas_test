@@ -569,3 +569,11 @@ model AIMessage {
 
   @@index([conversationId, createdAt])
 }
+
+/// Tareas periódicas ya hechas (precios diarios, copias…): la clave única evita repetirlas el mismo día.
+model JobRun {
+  key       String   @id
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

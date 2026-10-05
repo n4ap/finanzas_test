@@ -4,8 +4,9 @@ import { useRef, useState } from 'react';
 import { Button, Card, Field, Input } from '@/components/ui/primitives';
 import { useRun } from '@/components/ui/use-run';
 import { deleteAccountAction, deleteDataAction } from '@/server/actions/settings';
+import type { SettingsData } from '@/server/settings/queries';
 
-export function DataTab({ email }: { email: string }) {
+export function DataTab({ email, backups }: { email: string; backups: SettingsData['backups'] }) {
   const file = useRef<HTMLInputElement>(null);
   const [imp, setImp] = useState<{ busy: boolean; msg: string | null; err: string | null }>({ busy: false, msg: null, err: null });
   const del = useRun();
@@ -27,6 +28,16 @@ export function DataTab({ email }: { email: string }) {
 
   return (
     <div className="space-y-4">
+      <Card className="p-5">
+        <h2 className="mb-1 font-semibold">Copias de seguridad automáticas</h2>
+        {backups.enabled ? (
+          <div className="space-y-1 text-sm">
+            <p className="text-muted-foreground">Mientras la app está abierta, guarda una copia al día de todos tus datos y conserva las 14 últimas. Para recuperarla, usa «Importar» más abajo con uno de esos archivos.</p>
+            <p>Carpeta: <code className="break-all rounded bg-muted px-1 text-xs">{backups.dir}</code></p>
+            <p>{backups.last ? <>Última copia: <strong>{new Date(backups.last.at).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' })}</strong> · {backups.count} {backups.count === 1 ? 'copia guardada' : 'copias guardadas'}</> : 'Aún no hay copias: la primera se hace un minuto después de arrancar la app.'}</p>
+          </div>
+        ) : <p className="text-sm text-muted-foreground">Desactivadas (BACKUP_DIR=off en el archivo .env).</p>}
+      </Card>
       <Card className="p-5">
         <h2 className="mb-1 font-semibold">Exportar mis datos</h2>
         <p className="mb-3 text-sm text-muted-foreground">Descarga todo lo tuyo (tareas, calendario, email, finanzas, inversiones, salud, viajes, familia, automatizaciones, conversaciones e historial de cambios) en un archivo JSON. No incluye contraseñas, sesiones ni claves.</p>

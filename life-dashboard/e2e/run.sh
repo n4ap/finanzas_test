@@ -19,7 +19,7 @@ free_port() {
 start() { # start <puerto> [VAR=valor ...]  → deja el PID en $LAST_PID y comprueba que arranca de verdad
   local port="$1"; shift
   free_port "$port"
-  env "$@" $NEXT start -p "$port" >"/tmp/ld-e2e-$port.log" 2>&1 &
+  env SCHEDULER=off "$@" $NEXT start -p "$port" >"/tmp/ld-e2e-$port.log" 2>&1 &
   LAST_PID=$!
   for _ in $(seq 1 40); do curl -sf "http://localhost:$port/login" >/dev/null && return 0; kill -0 "$LAST_PID" 2>/dev/null || break; sleep 1; done
   echo "ERROR: el servidor del puerto $port no arrancó (ver /tmp/ld-e2e-$port.log)" >&2; tail -5 "/tmp/ld-e2e-$port.log" >&2; exit 1

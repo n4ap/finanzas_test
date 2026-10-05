@@ -1,0 +1,4 @@
+# Scripts de Windows con fin de línea CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.ico binary

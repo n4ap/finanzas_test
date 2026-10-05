@@ -22,7 +22,7 @@ export function SettingsView({ d, initialTab }: { d: SettingsData; initialTab: T
       {tab === 'connections' && <ConnectionsTab connections={d.connections} />}
       {tab === 'ai' && <AiTab ai={d.ai} />}
       {tab === 'security' && <SecurityTab sessions={d.sessions} />}
-      {tab === 'data' && <DataTab email={d.profile.email} />}
+      {tab === 'data' && <DataTab email={d.profile.email} backups={d.backups} />}
     </div>
   );
 }
