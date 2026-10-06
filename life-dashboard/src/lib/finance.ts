@@ -47,11 +47,12 @@ export function categorize(description: string, amount: number): string {
 // ───────────── Parseo de CSV ─────────────
 export interface ParsedCsv { delimiter: string; rows: string[][] }
 
-/** Parser CSV (RFC 4180): comillas, comillas escapadas (""), saltos de línea dentro de campos, BOM. Detecta ; , tab. */
+/** Parser CSV (RFC 4180): comillas, comillas escapadas (""), saltos de línea dentro de campos, BOM. Detecta ; , tab en las primeras líneas. */
 export function parseCsv(text: string): ParsedCsv {
   const src = text.replace(/^﻿/, '');
-  const firstLine = src.split(/\r?\n/, 1)[0] ?? '';
-  const count = (d: string) => { let n = 0, q = false; for (const ch of firstLine) { if (ch === '"') q = !q; else if (!q && ch === d) n++; } return n; };
+  // Se mira en las primeras líneas (no solo la primera): los extractos de banco empiezan con un título sin separadores.
+  const head = src.split(/\r?\n/, 30).filter((l) => l.trim() !== '');
+  const count = (d: string) => { let n = 0; for (const line of head) { let q = false; for (const ch of line) { if (ch === '"') q = !q; else if (!q && ch === d) n++; } } return n; };
   const counts = ([';', '\t', ','] as const).map((d) => [d, count(d)] as const).sort((x, y) => y[1] - x[1]);
   const delimiter = counts[0]![1] > 0 ? counts[0]![0] : ',';
 
@@ -118,8 +119,8 @@ export interface ColumnMapping { date: number; description: number; amount: numb
 
 const HEADER_ALIASES: Record<keyof ColumnMapping, string[]> = {
   date: ['fecha', 'fecha operacion', 'fecha valor', 'f operacion', 'f valor', 'date', 'booking date', 'fecha contable'],
-  description: ['concepto', 'descripcion', 'description', 'detalle', 'movimiento', 'observaciones', 'concepto movimiento', 'details'],
-  amount: ['importe', 'amount', 'cantidad', 'monto', 'importe eur', 'importe (eur)'],
+  description: ['concepto', 'descripcion', 'description', 'detalle', 'movimiento', 'observaciones', 'concepto movimiento', 'details', 'descripcion operacion', 'concepto operacion', 'comercio'],
+  amount: ['importe', 'amount', 'cantidad', 'monto', 'importe eur', 'importe (eur)', 'importe ()', 'importe euros'],
   debit: ['cargo', 'cargos', 'debe', 'debit', 'gasto', 'gastos'],
   credit: ['abono', 'abonos', 'haber', 'credit', 'ingreso', 'ingresos'],
 };
@@ -131,6 +132,15 @@ export function detectMapping(header: string[]): ColumnMapping | null {
   const date = find('date'), description = find('description'), amount = find('amount'), debit = find('debit'), credit = find('credit');
   if (date === null || description === null || (amount === null && debit === null && credit === null)) return null;
   return { date, description, amount, debit, credit };
+}
+
+/**
+ * Busca la fila de cabecera en las primeras filas: los extractos de banco (p. ej. Bankinter en Excel) traen antes
+ * el titular, la cuenta y el periodo. Devuelve el índice de la primera fila con columnas reconocibles, o 0.
+ */
+export function findHeaderRow(rows: string[][], maxScan = 30): number {
+  const i = rows.slice(0, maxScan).findIndex((r) => detectMapping(r) !== null);
+  return i >= 0 ? i : 0;
 }
 
 export interface ImportRow { line: number; date: string | null; description: string; amount: number | null; category: string; error?: string; duplicate?: boolean }

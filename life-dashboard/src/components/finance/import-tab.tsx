@@ -4,10 +4,12 @@ import { useMemo, useRef, useState, useTransition } from 'react';
 import { Badge, Button, Field, Select } from '@/components/ui/primitives';
 import { ALL_CATEGORIES, categoryLabel, type ColumnMapping } from '@/lib/finance';
 import { cn, formatEUR } from '@/lib/utils';
+import { readXlsx, rowsToCsv, XlsxError } from '@/lib/xlsx';
 import { importTransactionsAction, previewCsvAction, type CsvPreview } from '@/server/actions/finance';
 import type { AccountDTO } from './types';
 
 const MAX_BYTES = 1_000_000;
+const MAX_XLSX_BYTES = 5_000_000;
 const SHOWN = 300;
 
 /** UTF-8 estricto; si el archivo no lo es (exportaciones de bancos antiguos), Windows-1252. */
@@ -15,7 +17,7 @@ function decode(buf: ArrayBuffer): string {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return new TextDecoder('windows-1252').decode(buf); }
 }
 
-export function ImportTab({ accounts, defaultAccountId }: { accounts: AccountDTO[]; defaultAccountId?: string }) {
+export function ImportTab({ accounts, defaultAccountId, onView }: { accounts: AccountDTO[]; defaultAccountId?: string; onView?: (month: string) => void }) {
   const [accountId, setAccountId] = useState(defaultAccountId ?? accounts[0]?.id ?? '');
   const [text, setText] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
@@ -24,14 +26,15 @@ export function ImportTab({ accounts, defaultAccountId }: { accounts: AccountDTO
   const [cats, setCats] = useState<Record<number, string>>({});
   const [manual, setManual] = useState<{ date: number; description: number; amount: number | ''; debit: number | ''; credit: number | '' }>({ date: 0, description: 1, amount: '', debit: '', credit: '' });
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ imported: number; skipped: number; month: string | null } | null>(null);
+  const [negate, setNegate] = useState(false);
   const [pending, start] = useTransition();
   const input = useRef<HTMLInputElement>(null);
 
-  const reset = () => { setText(null); setFileName(''); setPreview(null); setPicked(new Set()); setCats({}); setError(null); if (input.current) input.current.value = ''; };
+  const reset = () => { setNegate(false); setText(null); setFileName(''); setPreview(null); setPicked(new Set()); setCats({}); setError(null); if (input.current) input.current.value = ''; };
 
-  const analyze = (t: string, mapping?: ColumnMapping) => start(async () => {
-    const r = await previewCsvAction({ accountId, text: t, mapping });
+  const analyze = (t: string, mapping?: ColumnMapping, neg = negate) => start(async () => {
+    const r = await previewCsvAction({ accountId, text: t, mapping, negate: neg });
     if (!r.ok) { setError(r.error); setPreview(null); return; }
     setError(null); setResult(null);
     setPreview(r.data!);
@@ -41,10 +44,17 @@ export function ImportTab({ accounts, defaultAccountId }: { accounts: AccountDTO
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
-    if (file.size > MAX_BYTES) { setError('El archivo es demasiado grande (máximo 1 MB).'); return; }
-    const t = decode(await file.arrayBuffer());
-    setText(t); setFileName(file.name); setResult(null);
-    analyze(t);
+    const excel = /\.xlsx?$/i.test(file.name);
+    if (file.size > (excel ? MAX_XLSX_BYTES : MAX_BYTES)) { setError(`El archivo es demasiado grande (máximo ${excel ? 5 : 1} MB).`); return; }
+    let t: string;
+    try {
+      // Excel (p. ej. el extracto de Bankinter): se lee aquí, en el navegador, y se analiza igual que un CSV.
+      t = excel ? rowsToCsv(await readXlsx(await file.arrayBuffer())) : decode(await file.arrayBuffer());
+    } catch (e) {
+      setError(e instanceof XlsxError ? e.message : 'No he podido leer el archivo.'); return;
+    }
+    setPreview(null); setNegate(false); setText(t); setFileName(file.name); setResult(null);
+    analyze(t, undefined, false);
   };
 
   const rows = useMemo(() => preview?.rows ?? [], [preview]);
@@ -57,7 +67,8 @@ export function ImportTab({ accounts, defaultAccountId }: { accounts: AccountDTO
       accountId, skipDuplicates: !selected.some(({ r }) => r.duplicate),
       rows: selected.map(({ r, i }) => ({ date: r.date, amount: r.amount, description: r.description, category: cats[i] ?? r.category })),
     });
-    if (res.ok) { setResult(res.data!); setPreview(null); setText(null); setFileName(''); if (input.current) input.current.value = ''; setError(null); } else setError(res.error);
+    const month = selected.reduce<string | null>((m, { r }) => (r.date && (!m || r.date > m) ? r.date : m), null)?.slice(0, 7) ?? null;
+    if (res.ok) { setResult({ ...res.data!, month }); setPreview(null); setText(null); setFileName(''); if (input.current) input.current.value = ''; setError(null); } else setError(res.error);
   });
 
   if (accounts.length === 0) return <p className="text-sm text-muted-foreground">Crea primero una cuenta en la pestaña Cuentas.</p>;
@@ -68,17 +79,17 @@ export function ImportTab({ accounts, defaultAccountId }: { accounts: AccountDTO
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <Field label="Importar en la cuenta"><Select value={accountId} onChange={(e) => { setAccountId(e.target.value); if (text) analyze(text); }}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select></Field>
           <div>
-            <input ref={input} id="csv-file" type="file" accept=".csv,.txt,text/csv" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
-            <label htmlFor="csv-file" className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"><FileUp size={16} /> Elegir archivo CSV</label>
+            <input ref={input} id="csv-file" type="file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={(e) => onFile(e.target.files?.[0])} />
+            <label htmlFor="csv-file" className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"><FileUp size={16} /> Elegir Excel o CSV</label>
           </div>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">Admite separador «;» «,» o tabulador, fechas dd/mm/aaaa o aaaa-mm-dd e importes como 1.234,56. Primero se muestra una vista previa: no se guarda nada hasta que confirmes. Los movimientos que ya existen se detectan y se desmarcan.</p>
+        <p className="mt-3 text-xs text-muted-foreground">Admite el Excel (.xlsx) que descargas del banco, por ejemplo Bankinter, y archivos CSV con separador «;» «,» o tabulador, fechas dd/mm/aaaa o aaaa-mm-dd e importes como 1.234,56. Primero se muestra una vista previa: no se guarda nada hasta que confirmes. Los movimientos que ya existen se detectan y se desmarcan.</p>
         {fileName && <p className="mt-2 text-sm">Archivo: <span className="font-medium">{fileName}</span> <button className="ml-2 text-xs text-primary hover:underline" onClick={reset}>Quitar</button></p>}
       </div>
 
       {pending && !preview && <p role="status" className="text-sm text-muted-foreground">Analizando archivo…</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {result && <p role="status" className="rounded-xl bg-success/10 p-3 text-sm text-success">Importados {result.imported} movimientos{result.skipped > 0 ? ` · ${result.skipped} omitidos por estar duplicados` : ''}. Ya aparecen en Movimientos y quedan en el historial de cambios.</p>}
+      {result && <p role="status" className="rounded-xl bg-success/10 p-3 text-sm text-success">Importados {result.imported} movimientos{result.skipped > 0 ? ` · ${result.skipped} omitidos por estar duplicados` : ''}. Ya aparecen en Movimientos y quedan en el historial de cambios.{onView && result.month && <button className="ml-2 font-medium underline" onClick={() => onView(result.month!)}>Ver movimientos</button>}</p>}
 
       {preview && !preview.mapping && (
         <div className="space-y-3 rounded-2xl border bg-card p-4">
@@ -102,6 +113,7 @@ export function ImportTab({ accounts, defaultAccountId }: { accounts: AccountDTO
             {stats.dup > 0 && <Badge tone="important">{stats.dup} ya existentes</Badge>}
             {stats.bad > 0 && <Badge tone="urgent">{stats.bad} con errores</Badge>}
             <span className="text-muted-foreground">de {preview.totalRows} filas</span>
+            <label className="inline-flex items-center gap-1.5 text-xs"><input type="checkbox" checked={negate} disabled={pending} onChange={(e) => { setNegate(e.target.checked); if (text) analyze(text, preview?.mapping ?? undefined, e.target.checked); }} /> Los gastos vienen en positivo (invertir signos)</label>
             <button className="ml-auto text-xs text-primary hover:underline" onClick={() => setPicked(new Set(rows.flatMap((r, i) => (!r.error && !r.duplicate ? [i] : []))))}>Solo nuevas</button>
             <button className="text-xs text-primary hover:underline" onClick={() => setPicked(new Set())}>Ninguna</button>
           </div>

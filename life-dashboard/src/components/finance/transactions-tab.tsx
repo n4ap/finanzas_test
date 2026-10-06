@@ -1,5 +1,5 @@
 'use client';
-import { ChevronLeft, ChevronRight, Download, Plus, Repeat, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, FileUp, Plus, Repeat, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge, Button, EmptyState, Input, Select } from '@/components/ui/primitives';
 import { ALL_CATEGORIES, categoryLabel } from '@/lib/finance';
@@ -9,7 +9,7 @@ import { TransactionForm } from './transaction-form';
 import { fmtDay } from './parts';
 import type { TxDTO } from './types';
 
-export function TransactionsTab({ o, params, setParams }: { o: FinanceOverview; params: { category?: string; q?: string; page: number; account?: string }; setParams: (u: Record<string, string | null>) => void }) {
+export function TransactionsTab({ o, params, setParams, onImport }: { o: FinanceOverview; params: { category?: string; q?: string; page: number; account?: string }; setParams: (u: Record<string, string | null>) => void; onImport?: () => void }) {
   const [form, setForm] = useState<{ open: boolean; tx?: TxDTO | null }>({ open: false });
   const [q, setQ] = useState(params.q ?? '');
   const { items, total, pageSize } = o.transactions;
@@ -27,7 +27,8 @@ export function TransactionsTab({ o, params, setParams }: { o: FinanceOverview; 
           <option value="">Todas las categorías</option>{ALL_CATEGORIES.map((c) => <option key={c} value={c}>{categoryLabel(c)}</option>)}
         </Select>
         <a href={`/api/finance/export?month=${o.month}`} className="inline-flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-sm hover:bg-muted"><Download size={14} /> Exportar CSV</a>
-        <Button className="ml-auto" onClick={() => setForm({ open: true })} disabled={o.accounts.length === 0}><Plus size={16} /> Nuevo movimiento</Button>
+        {onImport && <Button variant="outline" className="ml-auto" onClick={onImport} disabled={o.accounts.length === 0}><FileUp size={16} /> Importar extracto</Button>}
+        <Button className={onImport ? undefined : 'ml-auto'} onClick={() => setForm({ open: true })} disabled={o.accounts.length === 0}><Plus size={16} /> Nuevo movimiento</Button>
       </div>
 
       {items.length === 0 ? <EmptyState title="No hay movimientos con estos filtros" hint={o.accounts.length === 0 ? 'Crea primero una cuenta en la pestaña Cuentas.' : 'Prueba otro mes o limpia la búsqueda.'} /> : (
@@ -42,7 +43,7 @@ export function TransactionsTab({ o, params, setParams }: { o: FinanceOverview; 
                     <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">{t.description}
                       {t.recurring && <Badge tone="primary"><Repeat size={10} />recurrente</Badge>}
                       {t.upcoming && <Badge tone="important">previsto</Badge>}
-                      {t.source === 'csv' && <Badge>CSV</Badge>}
+                      {t.source === 'csv' && <Badge>Importado</Badge>}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">{categoryLabel(t.category)}{o.accounts.length > 1 && acc ? ` · ${acc.name}` : ''}{acc?.shared ? ` · ${t.by}` : ''}{t.merchant ? ` · ${t.merchant}` : ''}</span>
                   </span>

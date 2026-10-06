@@ -1,6 +1,7 @@
 // E2E Fase 3: finanzas e inversiones. Requiere app en marcha y seed fresco.
 import { writeFileSync } from 'node:fs';
 import { BASE, OUT, check, failures, launch, login, openSearch } from './helpers.mjs';
+import { makeXlsx } from './xlsx.mjs';
 
 const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -176,7 +177,30 @@ await tab('Movimientos');
 await page.waitForSelector('ul[aria-label=Movimientos]');
 await page.click('[aria-label="Mes anterior"]');
 await page.waitForSelector('text=Nómina extra E2E');
-check('importar: lo importado aparece en Movimientos con etiqueta CSV', (await page.locator('li:has-text("Nómina extra E2E")').textContent()).includes('CSV'));
+check('importar: lo importado aparece en Movimientos con etiqueta «Importado»', (await page.locator('li:has-text("Nómina extra E2E")').textContent()).includes('Importado'));
+// Excel de tarjeta (estilo Bankinter): filas de presentación, fechas de Excel y gastos en positivo
+const xlsxFile = '/tmp/claude-0/shots/bankinter.xlsx';
+writeFileSync(xlsxFile, makeXlsx([
+  ['Movimientos de tarjeta'], ['Titular: ALEX DEMO'], [],
+  ['FECHA', 'DESCRIPCIÓN', 'IMPORTE (€)'],
+  [new Date(py, prev.getMonth(), 14), 'GASOLINERA REPSOL E2E', 52.4],
+  [new Date(py, prev.getMonth(), 15), 'LIBRERIA "CENTRAL" E2E', 18.95],
+]));
+await page.click('button:has-text("Importar extracto")');
+await page.waitForSelector('text=Importar en la cuenta');
+check('movimientos: el botón «Importar extracto» abre la importación', true);
+await page.selectOption('main select >> nth=0', { label: 'Cuenta corriente' });
+await page.setInputFiles('#csv-file', xlsxFile);
+await page.waitForSelector('section[aria-label="Vista previa de la importación"]');
+const xText = await page.locator('section[aria-label="Vista previa de la importación"]').textContent();
+check('excel: salta la presentación y lee fechas e importes', /2 nuevas/.test(xText) && /\+52,40/.test(xText) && xText.includes(`${py}-${pm}-14`), xText.slice(0, 200));
+await page.check('text=Los gastos vienen en positivo');
+await page.waitForFunction(() => /−52,40/.test(document.querySelector('section[aria-label="Vista previa de la importación"]')?.textContent ?? ''));
+check('excel: «invertir signos» convierte los cargos en gastos y recategoriza', (await page.locator('select[aria-label^="Categoría de la fila"]').first().inputValue()) !== 'ingresos');
+await page.click('button:has-text("Importar 2 movimientos")');
+await page.click('button:has-text("Ver movimientos")');
+await page.waitForSelector('li:has-text("GASOLINERA REPSOL E2E")');
+check('excel: lo importado aparece en Movimientos como gasto', /−52,40/.test(await page.locator('li:has-text("GASOLINERA REPSOL E2E")').textContent()));
 
 // ───────── Cuentas y cuenta compartida (dos usuarios) ─────────
 await tab('Cuentas');

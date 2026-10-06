@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { detectMapping, mapRows, parseCsv, type ColumnMapping, type ImportRow } from '@/lib/finance';
+import { categorize, detectMapping, findHeaderRow, mapRows, parseCsv, type ColumnMapping, type ImportRow } from '@/lib/finance';
 import { rateLimit } from '@/lib/rate-limit';
 import { requireUser } from '../auth';
 import { ServiceError } from '../finance/core';
@@ -79,19 +79,23 @@ const mappingSchema = z.object({ date: z.number().int().min(0), description: z.n
 export interface CsvPreview { header: string[]; mapping: ColumnMapping | null; rows: ImportRow[]; totalRows: number; delimiter: string; sample: string[][] }
 
 /** Analiza el CSV en el servidor: columnas, importes, fechas, categorías sugeridas y duplicados. No guarda nada. */
-export async function previewCsvAction(input: { accountId: string; text: string; mapping?: unknown }): Promise<ActionResult<CsvPreview>> {
+export async function previewCsvAction(input: { accountId: string; text: string; mapping?: unknown; negate?: boolean }): Promise<ActionResult<CsvPreview>> {
   if (typeof input.text !== 'string' || input.text.length === 0) return fail('El archivo está vacío');
   if (input.text.length > MAX_CSV_CHARS) return fail('El archivo es demasiado grande (máximo 1 MB)');
   return exec(async (userId) => {
     const parsed = parseCsv(input.text);
-    const [header, ...data] = parsed.rows;
+    const headerAt = findHeaderRow(parsed.rows); // salta las filas de presentación del extracto
+    const [header, ...data] = parsed.rows.slice(headerAt);
     if (!header || data.length === 0) throw new ServiceError('El archivo no tiene filas de datos');
     if (data.length > 5000) throw new ServiceError('Máximo 5000 filas por importación');
     const given = input.mapping ? mappingSchema.safeParse(input.mapping) : null;
     const mapping = given?.success ? given.data : detectMapping(header);
     const sample = data.slice(0, 3);
     if (!mapping) return { header, mapping: null, rows: [], totalRows: data.length, delimiter: parsed.delimiter, sample };
-    const rows = await previewDuplicates(userId, input.accountId, mapRows(data, mapping));
+    let mapped = mapRows(data, mapping, headerAt + 2);
+    // Extractos de tarjeta que dan los gastos en positivo: se invierten los signos y se recalcula la categoría.
+    if (input.negate === true) mapped = mapped.map((r) => (r.amount === null ? r : { ...r, amount: -r.amount, category: categorize(r.description, -r.amount) }));
+    const rows = await previewDuplicates(userId, input.accountId, mapped);
     return { header, mapping, rows, totalRows: data.length, delimiter: parsed.delimiter, sample };
   }, { key: 'csv-preview', max: 30, windowMs: 60_000 });
 }

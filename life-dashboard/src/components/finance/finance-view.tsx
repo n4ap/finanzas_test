@@ -60,10 +60,10 @@ export function FinanceView({ o, tab, params }: { o: FinanceOverview; tab: TabId
 
       <div className={cn('transition-opacity', loading && 'opacity-60')} aria-busy={loading}>
         {tab === 'resumen' && <SummaryTab o={o} />}
-        {tab === 'movimientos' && <TransactionsTab o={o} params={params} setParams={setParams} />}
+        {tab === 'movimientos' && <TransactionsTab o={o} params={params} setParams={setParams} onImport={() => setParams({ tab: 'importar', page: null })} />}
         {tab === 'presupuestos' && <BudgetsTab o={o} />}
         {tab === 'cuentas' && <AccountsTab o={o} />}
-        {tab === 'importar' && <ImportTab accounts={o.accounts} defaultAccountId={params.account} />}
+        {tab === 'importar' && <ImportTab accounts={o.accounts} defaultAccountId={params.account} onView={(month) => setParams({ tab: 'movimientos', month, page: null, category: null, q: null })} />}
         {tab === 'historial' && <AuditTab o={o} />}
       </div>
     </div>
