@@ -48,6 +48,10 @@ model User {
   auditLogs     AuditLog[]
   layout        DashboardLayout?
   memberships   HouseholdMember[]
+  coachAnswers  CoachAnswer[]
+  goals         Goal[]
+  reviews       Review[]
+  decisions     Decision[]
 }
 
 /// Sesión con token opaco; en BD solo se guarda su hash SHA-256.
@@ -576,4 +580,83 @@ model JobRun {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// ───────────── Coach personal ─────────────
+
+/// Respuesta a una pregunta de la entrevista del coach: forma el «mapa personal de vida».
+model CoachAnswer {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String // id de la pregunta (src/lib/coach.ts)
+  area      String
+  answer    String
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+}
+
+/// Objetivo en 4 niveles: visión → anual → trimestral (90 días) → semanal.
+model Goal {
+  id         String    @id @default(cuid())
+  userId     String
+  parentId   String?
+  level      String // vision | annual | quarterly | weekly
+  area       String // salud | relaciones | finanzas | trabajo | crecimiento | ocio | personal
+  title      String
+  why        String?
+  metric     String?
+  baseline   String?
+  target     String?
+  progress   Int       @default(0) // 0-100
+  dueDate    DateTime?
+  nextAction String?
+  obstacles  String?
+  planB      String?
+  status     String    @default("active") // active | done | dropped
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent     Goal?     @relation("GoalTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Goal[]    @relation("GoalTree")
+
+  @@index([userId, status])
+}
+
+/// Revisión diaria, semanal o mensual. `period` = día (AAAA-MM-DD), lunes de la semana o mes (AAAA-MM).
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String // daily | weekly | monthly
+  period    String
+  answers   Json     @default("{}")
+  scores    Json? // semanal: puntuación 0-10 por área
+  energy    Int?
+  mood      Int?
+  stress    Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, period])
+}
+
+/// Decisión importante estructurada: objetivo, opciones (ventajas, desventajas, riesgos, coste), impacto y próxima acción.
+model Decision {
+  id             String   @id @default(cuid())
+  userId         String
+  title          String
+  objective      String?
+  options        Json     @default("[]")
+  impact         String?
+  recommendation String?
+  nextAction     String?
+  status         String   @default("open") // open | decided
+  chosen         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }

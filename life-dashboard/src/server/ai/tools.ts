@@ -12,6 +12,10 @@ import { addShopping } from '../life/family';
 import { getFamilyData, getHealthData, listTrips } from '../life/queries';
 import { setTaskStatusFor } from '../life/tasks';
 import { ServiceError, fail } from '../life/core';
+import { GOAL_AREAS, GOAL_LEVELS } from '@/lib/coach';
+import { goalSchema } from '@/lib/validation-coach';
+import { createGoal } from '../coach/service';
+import { getCoachData } from '../coach/queries';
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha no válida');
 const num = (d: { toString(): string }) => Number(d.toString());
@@ -206,6 +210,30 @@ const planWeek = read({
   },
 });
 
+const getCoach = read({
+  name: 'get_coach',
+  description: 'Contexto del coach personal: perfil de vida (respuestas de la entrevista), objetivos por nivel con métrica y próxima acción, revisiones recientes (ánimo, energía, estrés y puntuaciones semanales 0-10 con tendencias), alertas detectadas, foco de hoy y decisiones abiertas. Úsala antes de aconsejar, revisar la semana, hacer el resumen/dashboard o analizar una decisión.',
+  schema: z.object({ decision: z.string().trim().max(120).optional() }),
+  async run(ctx, { decision }) {
+    const c = await getCoachData(ctx.userId, ctx.now);
+    const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const q = decision ? norm(decision) : null;
+    const decisions = c.decisions.filter((x) => (q ? norm(x.title).includes(q) || q.includes(norm(x.title).slice(0, 30)) : x.status === 'open')).slice(0, 5);
+    return {
+      name: c.name, today: c.today,
+      interview: { answered: c.interview.answered, total: c.interview.total, complete: c.interview.complete },
+      profile: c.lifeMap.map((a) => ({ area: a.label, items: a.items.map((i) => ({ q: clip(i.question, 90), a: clip(i.answer, 300) })) })),
+      goals: c.goals.filter((g) => g.status === 'active').map((g) => ({ id: g.id, level: g.level, area: g.area, title: g.title, why: clip(g.why, 200) || null, metric: g.metric, baseline: g.baseline, target: g.target, progress: g.progress, dueDate: g.dueDate, nextAction: g.nextAction, obstacles: clip(g.obstacles, 200) || null, planB: clip(g.planB, 200) || null })),
+      focus: c.focus, panel: c.panel, weekData: c.weekData,
+      insights: c.insights.map((i) => ({ level: i.level, area: i.area, title: i.title, detail: i.detail })),
+      trends: c.trends ? { overall: c.trends.overall, best: c.trends.best?.label ?? null, worst: c.trends.worst?.label ?? null, areas: c.trends.areas.filter((a) => a.last !== null).map((a) => ({ area: a.label, last: a.last, delta: a.delta, avg4: a.avg4, declining: a.declining, improving: a.improving })) } : null,
+      lastWeekly: c.reviews.weekly[0] ? { week: c.reviews.weekly[0].period, answers: c.reviews.weekly[0].answers } : null,
+      recentDays: c.reviews.daily.slice(0, 7).map((r) => ({ day: r.period, mood: r.mood, energy: r.energy, stress: r.stress, priorityTomorrow: clip(r.answers.manana, 120) || null })),
+      decisions,
+    };
+  },
+});
+
 // ───────────── Escritura (solo propuestas hasta confirmar) ─────────────
 
 const createTask = write({
@@ -272,6 +300,25 @@ const scheduleTasks = write({
   },
 });
 
-export const TOOLS: AIToolDef[] = [getAgenda, listTasks, getSpending, getPayments, getPortfolio, getHealth, getTrips, getBirthdays, getPriorities, searchEmails, planWeek, createTask, completeTask, createEvent, addShoppingItem, scheduleTasks];
+
+const createGoalTool = write({
+  name: 'create_goal',
+  description: `Crea un objetivo del coach (requiere confirmación). level: ${GOAL_LEVELS.map((l) => l.id).join(' | ')}; area: ${GOAL_AREAS.map((a) => a.id).join(' | ')}. Debe ser medible: incluye métrica, objetivo final, fecha límite y una próxima acción concreta.`,
+  schema: z.object({
+    level: z.enum(['vision', 'annual', 'quarterly', 'weekly']), area: z.enum(['salud', 'relaciones', 'finanzas', 'trabajo', 'crecimiento', 'ocio']),
+    title: z.string().trim().min(3).max(160), why: z.string().max(500).optional(), metric: z.string().max(200).optional(), baseline: z.string().max(200).optional(), target: z.string().max(200).optional(),
+    dueDate: dateKey.optional(), nextAction: z.string().max(200).optional(),
+  }),
+  async prepare(ctx, a) {
+    const p = goalSchema.safeParse(a);
+    if (!p.success) fail(p.error.issues[0]?.message ?? 'Objetivo no válido');
+    const lv = GOAL_LEVELS.find((l) => l.id === a.level)!.label;
+    const active = a.level === 'quarterly' ? await db.goal.count({ where: { userId: ctx.userId, level: 'quarterly', status: 'active' } }) : 0;
+    return `Crear objetivo (${lv}): «${a.title}»${a.metric ? ` · métrica: ${a.metric}` : ''}${a.target ? ` → ${a.target}` : ''}${a.dueDate ? ` · antes del ${fmtLocalDay(a.dueDate).toLowerCase()}` : ''}${a.nextAction ? ` · próxima acción: ${a.nextAction}` : ''}${active >= 3 ? ` (ojo: ya tienes ${active} objetivos de 90 días)` : ''}`;
+  },
+  async run(ctx, a) { await createGoal(ctx.userId, a); return `Objetivo creado: «${a.title}»`; },
+});
+
+export const TOOLS: AIToolDef[] = [getAgenda, listTasks, getSpending, getPayments, getPortfolio, getHealth, getTrips, getBirthdays, getPriorities, searchEmails, planWeek, getCoach, createTask, completeTask, createEvent, addShoppingItem, scheduleTasks, createGoalTool];
 export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);
 export { ServiceError };

@@ -27,7 +27,7 @@ start() { # start <puerto> [VAR=valor ...]  → deja el PID en $LAST_PID y compr
 
 npx prisma db push --skip-generate >/dev/null
 export BASE_URL="http://localhost:$PORT" LOGIN_RATE_LIMIT=1000
-SCRIPTS=("$@"); [ ${#SCRIPTS[@]} -eq 0 ] && SCRIPTS=(smoke phase2 phase3 phase4 phase5 phase6 mobile)
+SCRIPTS=("$@"); [ ${#SCRIPTS[@]} -eq 0 ] && SCRIPTS=(smoke phase2 phase3 phase4 phase5 phase6 phase7 mobile)
 status=0
 pids=()
 cleanup() { for p in "${pids[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done; free_port "$PORT" 2>/dev/null || true; free_port "$STRICT_PORT" 2>/dev/null || true; }

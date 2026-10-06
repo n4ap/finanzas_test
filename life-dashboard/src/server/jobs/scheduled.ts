@@ -5,9 +5,11 @@ import { runAutomations } from '../automations/engine';
 import { refreshPrices, type TextFetcher } from '../finance/quotes';
 import { syncDue } from '../integrations/service';
 import { tzOffsetMinutes } from '../settings/profile';
+import { isoWeekday, weekStart } from '@/lib/coach';
+import { getCoachData } from '../coach/queries';
 import { backupRoot, writeBackup } from './backup';
 
-export interface TickReport { users: number; fired: number; proposals: number; errors: number; synced: number; syncFailed: number; prices: number; backups: number }
+export interface TickReport { users: number; fired: number; proposals: number; errors: number; synced: number; syncFailed: number; prices: number; backups: number; nudges: number }
 
 /** Reserva una tarea (clave única). false si ya se hizo. */
 async function claim(key: string) {
@@ -26,7 +28,7 @@ const localDay = (tz: string, now: Date) => new Date(now.getTime() - tzOffsetMin
  * La usan el planificador interno (instrumentation.ts) y la ruta /api/automations/run.
  */
 export async function runScheduledTick(now = new Date(), deps: { fetcher?: TextFetcher } = {}): Promise<TickReport> {
-  const r: TickReport = { users: 0, fired: 0, proposals: 0, errors: 0, synced: 0, syncFailed: 0, prices: 0, backups: 0 };
+  const r: TickReport = { users: 0, fired: 0, proposals: 0, errors: 0, synced: 0, syncFailed: 0, prices: 0, backups: 0, nudges: 0 };
   const sync = await syncDue(now).catch((e) => { console.error('[planificador] sincronización', e); return { ok: 0, failed: 0 }; });
   r.synced = sync.ok; r.syncFailed = sync.failed;
 
@@ -39,7 +41,7 @@ export async function runScheduledTick(now = new Date(), deps: { fetcher?: TextF
   }
 
   const root = backupRoot();
-  const users = await db.user.findMany({ select: { id: true, email: true, timezone: true, _count: { select: { portfolios: true } } }, take: 500 });
+  const users = await db.user.findMany({ select: { id: true, email: true, timezone: true, _count: { select: { portfolios: true, goals: true, coachAnswers: true } } }, take: 500 });
   for (const u of users) {
     const day = localDay(u.timezone, now);
     if (u._count.portfolios > 0) {
@@ -60,6 +62,30 @@ export async function runScheduledTick(now = new Date(), deps: { fetcher?: TextF
       }
     }
   }
+  for (const u of users) {
+    if (u._count.goals + u._count.coachAnswers === 0) continue; // solo quien usa el coach
+    try { r.nudges += await coachNudges(u.id, localDay(u.timezone, now), now); } catch (e) { r.errors++; console.error('[planificador] coach', u.id, e); }
+  }
   await db.jobRun.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 40 * 86_400_000) } } });
   return r;
+}
+
+/**
+ * Coach proactivo (como mucho una vez por semana cada aviso): recordatorio de la revisión semanal en domingo y
+ * avisos graves (sueño, ánimo bajo) para que no pasen desapercibidos. Van al centro de notificaciones.
+ */
+async function coachNudges(userId: string, day: string, now: Date) {
+  const week = weekStart(day);
+  let n = 0;
+  const notify = async (key: string, title: string, body: string, href: string) => {
+    if (!(await claim(`coach:${key}:${userId}:${week}`))) return;
+    await db.notification.create({ data: { userId, type: 'coach', title, body, href } });
+    n++;
+  };
+  if (isoWeekday(day) === 7 && !(await db.review.findUnique({ where: { userId_kind_period: { userId, kind: 'weekly', period: week } }, select: { id: true } }))) {
+    await notify('weekly', 'Toca tu revisión semanal', '15 minutos: qué ha funcionado, qué no, qué cambias y tu prioridad de la próxima semana.', '/coach?tab=revisiones');
+  }
+  const c = await getCoachData(userId, now);
+  for (const i of c.insights.filter((x) => x.level === 'alert').slice(0, 2)) await notify(i.id, i.title, i.detail, i.href);
+  return n;
 }

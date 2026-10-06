@@ -44,6 +44,22 @@ export const exportSchema = z.object({
   shopping: arr(z.object({ label: text(120), done: z.boolean().default(false) }), 500),
   automations: arr(z.object({ name: text(80), triggerType: text(40), triggerConfig: z.record(z.string(), z.unknown()).default({}), actionType: text(40), actionConfig: z.record(z.string(), z.unknown()).default({}), requiresConfirmation: z.boolean().default(true), enabled: z.boolean().default(true) }), 50),
   conversations: arr(z.object({ title: text(100), createdAt: iso, messages: arr(z.object({ role: z.enum(['user', 'assistant']), content: text(20_000), createdAt: iso }), 400) }), 200),
+  coach: z.object({
+    answers: arr(z.object({ key: text(40), area: text(30), answer: text(2000) }), 200),
+    goals: arr(z.object({
+      ref, parentRef: ref.nullish(), level: z.enum(['vision', 'annual', 'quarterly', 'weekly']), area: z.enum(['salud', 'relaciones', 'finanzas', 'trabajo', 'crecimiento', 'ocio']), title: text(160),
+      why: optText(500), metric: optText(200), baseline: optText(200), target: optText(200), progress: z.number().int().min(0).max(100), dueDate: optIso,
+      nextAction: optText(200), obstacles: optText(500), planB: optText(500), status: z.enum(['active', 'done', 'dropped']),
+    }), 500),
+    reviews: arr(z.object({
+      kind: z.enum(['daily', 'weekly', 'monthly']), period: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/), answers: z.record(z.string().max(40), text(2000)).default({}),
+      scores: z.record(z.string().max(30), z.number().int().min(0).max(10)).nullish(), energy: z.number().int().min(1).max(10).nullish(), mood: z.number().int().min(1).max(10).nullish(), stress: z.number().int().min(1).max(10).nullish(),
+    }), 5000),
+    decisions: arr(z.object({
+      title: text(160), objective: optText(500), options: z.array(z.object({ name: text(120), pros: optText(800), cons: optText(800), risks: optText(800), cost: optText(400) })).max(6).default([]),
+      impact: optText(800), recommendation: optText(1500), nextAction: optText(200), status: z.enum(['open', 'decided']), chosen: optText(120),
+    }), 200),
+  }).default({ answers: [], goals: [], reviews: [], decisions: [] }),
   /** Solo informativo (historial de cambios financieros): no se importa. */
   auditLog: z.array(z.unknown()).optional(),
 });

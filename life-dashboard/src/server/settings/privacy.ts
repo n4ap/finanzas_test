@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomBytes } from 'node:crypto';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { ALL_QUESTIONS, questionByKey } from '@/lib/coach';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/crypto';
 import { EXPORT_VERSION, IMPORT_MAX_BYTES, exportSchema, type ExportFile, type ExportFileInput } from '@/lib/privacy-format';
@@ -13,7 +14,7 @@ const dec = (d: { toString(): string } | null) => (d == null ? null : d.toString
 
 /** Todos los datos PROPIOS del usuario en un único JSON portable. Sin contraseña, sesiones, claves ni tokens de conexiones. */
 export async function exportUserData(userId: string, now = new Date()): Promise<ExportFileInput> {
-  const [u, projects, tasks, calendars, emails, accounts, budgets, portfolios, workouts, metrics, goals, trips, family, shopping, automations, conversations, audit] = await Promise.all([
+  const [u, projects, tasks, calendars, emails, accounts, budgets, portfolios, workouts, metrics, goals, trips, family, shopping, automations, conversations, audit, coachAnswers, coachGoals, reviews, decisions] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId } }),
     db.project.findMany({ where: { userId } }),
     db.task.findMany({ where: { userId } }),
@@ -31,6 +32,10 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
     db.automation.findMany({ where: { userId } }),
     db.aIConversation.findMany({ where: { userId }, include: { messages: { where: { role: { in: ['user', 'assistant'] } }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] } } }),
     db.auditLog.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    db.coachAnswer.findMany({ where: { userId } }),
+    db.goal.findMany({ where: { userId } }),
+    db.review.findMany({ where: { userId }, orderBy: [{ kind: 'asc' }, { period: 'asc' }] }),
+    db.decision.findMany({ where: { userId } }),
   ]);
   const prefs = (u.preferences ?? {}) as { followedNews?: string[] };
   return {
@@ -51,6 +56,12 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
     shopping: shopping.map((s) => ({ label: s.label, done: s.done })),
     automations: automations.map((a) => ({ name: a.name, triggerType: a.triggerType, triggerConfig: a.triggerConfig as Record<string, unknown>, actionType: a.actionType, actionConfig: a.actionConfig as Record<string, unknown>, requiresConfirmation: a.requiresConfirmation, enabled: a.enabled })),
     conversations: conversations.map((c) => ({ title: c.title, createdAt: iso(c.createdAt), messages: c.messages.map((m) => ({ role: m.role as 'user', content: m.content, createdAt: iso(m.createdAt) })) })),
+    coach: {
+      answers: coachAnswers.map((a) => ({ key: a.key, area: a.area, answer: a.answer })),
+      goals: coachGoals.map((g) => ({ ref: g.id, parentRef: g.parentId, level: g.level as 'annual', area: g.area as 'salud', title: g.title, why: g.why, metric: g.metric, baseline: g.baseline, target: g.target, progress: g.progress, dueDate: optIso(g.dueDate), nextAction: g.nextAction, obstacles: g.obstacles, planB: g.planB, status: g.status as 'active' })),
+      reviews: reviews.map((r) => ({ kind: r.kind as 'daily', period: r.period, answers: r.answers as Record<string, string>, scores: (r.scores ?? null) as Record<string, number> | null, energy: r.energy, mood: r.mood, stress: r.stress })),
+      decisions: decisions.map((x) => ({ title: x.title, objective: x.objective, options: x.options as { name: string }[], impact: x.impact, recommendation: x.recommendation, nextAction: x.nextAction, status: x.status as 'open', chosen: x.chosen })),
+    },
     auditLog: audit.map((a) => ({ entity: a.entity, entityId: a.entityId, action: a.action, before: a.before, after: a.after, createdAt: iso(a.createdAt) })),
   };
 }
@@ -138,6 +149,32 @@ export async function importUserData(userId: string, raw: string): Promise<Impor
       if (c.messages.length) await tx.aIMessage.createMany({ data: c.messages.map((m) => ({ conversationId: conv.id, role: m.role, content: m.content, createdAt: d(m.createdAt) })) });
     }
     bump('conversaciones', f.conversations.length);
+
+    // Coach: lo que ya existe (misma pregunta o mismo periodo de revisión) no se pisa.
+    const known = new Set(ALL_QUESTIONS.map((q) => q.key));
+    for (const a of f.coach.answers) {
+      const q = questionByKey(a.key);
+      if (!known.has(a.key) || !q || !a.answer.trim()) continue;
+      if (await tx.coachAnswer.findUnique({ where: { userId_key: { userId, key: a.key } }, select: { id: true } })) continue;
+      await tx.coachAnswer.create({ data: { userId, key: a.key, area: q.area, answer: a.answer } });
+      bump('respuestas del coach', 1);
+    }
+    const gid = new Map(f.coach.goals.map((g) => [g.ref, newId()]));
+    const order = ['vision', 'annual', 'quarterly', 'weekly'];
+    if (f.coach.goals.length) {
+      const sorted = [...f.coach.goals].sort((a, b) => order.indexOf(a.level) - order.indexOf(b.level));
+      await tx.goal.createMany({ data: sorted.map((g) => ({ id: gid.get(g.ref)!, userId, parentId: g.parentRef && gid.has(g.parentRef) ? gid.get(g.parentRef)! : null, level: g.level, area: g.area, title: g.title, why: g.why ?? null, metric: g.metric ?? null, baseline: g.baseline ?? null, target: g.target ?? null, progress: g.progress, dueDate: dn(g.dueDate), nextAction: g.nextAction ?? null, obstacles: g.obstacles ?? null, planB: g.planB ?? null, status: g.status })) });
+      bump('objetivos', f.coach.goals.length);
+    }
+    for (const r of f.coach.reviews) {
+      if (await tx.review.findUnique({ where: { userId_kind_period: { userId, kind: r.kind, period: r.period } }, select: { id: true } })) continue;
+      await tx.review.create({ data: { userId, kind: r.kind, period: r.period, answers: r.answers, scores: r.scores ?? Prisma.JsonNull, energy: r.energy ?? null, mood: r.mood ?? null, stress: r.stress ?? null } });
+      bump('revisiones', 1);
+    }
+    if (f.coach.decisions.length) {
+      await tx.decision.createMany({ data: f.coach.decisions.map((x) => ({ userId, title: x.title, objective: x.objective ?? null, options: x.options as Prisma.InputJsonValue, impact: x.impact ?? null, recommendation: x.recommendation ?? null, nextAction: x.nextAction ?? null, status: x.status, chosen: x.chosen ?? null })) });
+      bump('decisiones', f.coach.decisions.length);
+    }
   }, { timeout: 120_000, maxWait: 10_000 });
   } catch (e) {
     if (e instanceof ServiceError) throw e;
@@ -197,6 +234,10 @@ async function wipe(tx: Tx, userId: string) {
   await tx.dashboardLayout.deleteMany({ where: { userId } });
   await tx.auditLog.deleteMany({ where: { userId } });
   await tx.account.deleteMany({ where: { userId } }); // conexiones y claves guardadas
+  await tx.coachAnswer.deleteMany({ where: { userId } });
+  await tx.goal.deleteMany({ where: { userId } });
+  await tx.review.deleteMany({ where: { userId } });
+  await tx.decision.deleteMany({ where: { userId } });
 }
 
 /** Borra TODOS los datos del usuario pero conserva su cuenta, perfil y sesión. Pide la contraseña. */

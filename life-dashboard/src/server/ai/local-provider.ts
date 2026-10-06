@@ -17,10 +17,11 @@ export const HELP = [
   'Puedo consultar y organizar tu información. Prueba con:',
   '- **Consultas**: «¿Qué tengo mañana?», «tareas atrasadas», «¿cuánto he gastado este mes?», «próximos pagos», «cómo van mis inversiones», «mi salud», «mis viajes», «próximos cumpleaños», «¿qué es lo más importante?», «emails por responder».',
   '- **Acciones** (siempre te pido confirmación): «crea una tarea llamar al dentista el viernes», «reunión con Marta mañana a las 10», «añade leche y pan a la compra», «completa la tarea de impuestos», «organízame la semana».',
+  '- **Coach**: «¿cómo voy?» (tu dashboard personal), «revisión semanal», «mis objetivos», «analiza mi decisión «…»».',
   'Soy un asistente local basado en reglas (no un modelo de lenguaje): entiendo frases sencillas y no envío tus datos fuera.',
 ].join('\n');
 
-type Intent = 'greeting' | 'complete' | 'shopping' | 'event' | 'task_create' | 'weekplan' | 'priorities' | 'birthdays' | 'trips' | 'health' | 'portfolio' | 'payments' | 'spending' | 'emails' | 'tasks' | 'agenda' | 'unknown';
+type Intent = 'coach_panel' | 'coach_review' | 'coach_goals' | 'coach_decision' | 'greeting' | 'complete' | 'shopping' | 'event' | 'task_create' | 'weekplan' | 'priorities' | 'birthdays' | 'trips' | 'health' | 'portfolio' | 'payments' | 'spending' | 'emails' | 'tasks' | 'agenda' | 'unknown';
 
 export function detectIntent(text: string): Intent {
   const f = fold(text).trim();
@@ -29,6 +30,10 @@ export function detectIntent(text: string): Intent {
   if (has(f, /\b(crea|crear|agenda|agendar|programa|programar|pon|poner|anade|anadir|apunta|apuntar|nueva|nuevo)\b.*\b(evento|reunion|cita|llamada)\b/) || has(f, /^(evento|reunion|cita)\b/)) return 'event';
   if (has(f, /\b(crea|crear|anade|anadir|apunta|apuntar|anota|anotar|nueva)\b.*\btarea\b/) || has(f, /\b(recuerdame|recordarme)\b/)) return 'task_create';
   if (has(f, /\b(organiza|organizame|planifica|planificame|prepara|reparte)\b.*\bsemana\b/)) return 'weekplan';
+  if (has(f, /\b(analiza\w*|ayudame con|ayudame a tomar)\b.*\b(decision|decidir|dilema)\b/) || has(f, /\bmi decision\b/)) return 'coach_decision';
+  if (has(f, /\brevision (semanal|diaria|mensual|de la semana|del mes)\b/) || has(f, /\b(revisa|repasa|analiza)\w* (mi|la) (semana|mes)\b/) || has(f, /\bcomo (me )?ha ido (la|mi|esta) semana\b/)) return 'coach_review';
+  if (has(f, /\b(mis objetivos|objetivos de 90|mis metas)\b/)) return 'coach_goals';
+  if (has(f, /\b(como voy|mi situacion|resumen de mi (vida|situacion|semana)|mi dashboard|dashboard personal|mapa (personal|de vida)|coach)\b/)) return 'coach_panel';
   if (has(f, /\b(prioridad|prioridades|importante|urgente|urgentes)\b/) || has(f, /\bque (deberia|debo|hago)\b/) || has(f, /\bsiguiente accion\b/)) return 'priorities';
   if (has(f, /\bcumple/)) return 'birthdays';
   if (has(f, /\b(viaje|viajes|maleta|vuelo)\b/)) return 'trips';
@@ -152,6 +157,75 @@ function composeRead(results: ToolResult[]): string {
   }
 }
 
+
+// ───────── Coach ─────────
+
+const of10 = (n: any) => (typeof n === 'number' ? `${n}/10` : '—');
+const COACH_PRO = '_Soy el asistente local por reglas: ordeno tus datos y aplico las reglas del coach. Para un análisis razonado y conversación libre, activa Claude en Ajustes → IA._';
+
+function coachPanel(d: any): string {
+  const p = d.panel;
+  const lines = ['**🎯 OBJETIVOS**', p.goal ? `- Principal: ${p.goal.title}\n- Progreso: ${p.goal.progress} %\n- Próxima acción: ${p.goal.nextAction ?? 'sin definir'}` : '- Sin objetivo de 90 días. Defínelo en Coach → Objetivos.'];
+  lines.push('**🏋️ SALUD**', `- Entrenamiento: ${p.health.workouts}`, `- Sueño: ${p.health.sleep ?? '—'}`, `- Recuperación: ${of10(p.health.recovery)}`);
+  lines.push('**💰 FINANZAS** (este mes)', `- Ingresos: ${eur(p.finance.income)} · Gastos: ${eur(p.finance.expenses)} · Ahorro: ${eur(p.finance.saving)}`, `- Inversiones: ${eur(p.finance.investments)} · Patrimonio: ${eur(p.finance.netWorth)}`);
+  lines.push('**💼 TRABAJO**', `- Prioridad: ${p.work.priority ?? '—'} · Proyectos activos: ${p.work.projects}`, `- Próxima acción: ${p.work.nextAction ?? '—'}`);
+  lines.push('**🧠 MENTE**', p.mind ? `- Ánimo ${of10(p.mind.mood)} · Estrés ${of10(p.mind.stress)} · Energía ${of10(p.mind.energy)}` : '- Sin revisión diaria reciente.');
+  lines.push('**❤️ RELACIONES**', `- Puntuación semanal: ${of10(p.relations.score)}${p.relations.nextBirthday ? ` · próximo cumpleaños: ${p.relations.nextBirthday.name}` : ''}`);
+  lines.push('**📚 APRENDIZAJE**', p.learning.length ? p.learning.map((g: any) => `- ${g.title}${g.nextAction ? ` → ${g.nextAction}` : ''}`).join('\n') : '- Sin objetivos de crecimiento activos.');
+  lines.push('**⚠️ ALERTAS**', d.insights.length ? d.insights.slice(0, 4).map((i: any) => `- ${i.title}`).join('\n') : '- Nada destacable.');
+  lines.push('**🚀 PRIORIDADES**', d.focus.important.length ? d.focus.important.map((x: any, i: number) => `${i + 1}. ${x.title}`).join('\n') : '1. Elige 1-3 cosas importantes para hoy.');
+  if (!d.interview.complete) lines.push('', `Para conocerte mejor, completa la entrevista inicial (${d.interview.answered}/${d.interview.total}) en **Coach → Mapa de vida**.`);
+  return lines.join('\n');
+}
+
+function coachReview(d: any): string {
+  const t = d.trends;
+  if (!t) return ['Aún no hay revisiones semanales con puntuación. Hazla en **Coach → Revisiones → Semanal** (5-10 min): puntúa 10 áreas de 0 a 10 y responde 4 preguntas.', '', `Datos de estos 7 días: ${d.weekData.workouts}/${d.weekData.workoutTarget} entrenos, ${d.weekData.tasksDone} tareas hechas.`].join('\n');
+  const areas = t.areas as any[];
+  const good = areas.filter((a) => a.improving || (a.last ?? 0) >= 7).map((a) => `${a.area} (${a.last})`);
+  const bad = areas.filter((a) => a.declining || (a.last ?? 10) <= 4).map((a) => `${a.area} (${a.last}${a.declining ? ', baja 3 semanas' : ''})`);
+  const top = d.insights[0];
+  return [
+    `**Revisión de la semana** · media ${t.overall ?? '—'}/10`,
+    `**Lo que ha funcionado:** ${good.length ? good.join(', ') : 'ninguna área destaca todavía'}.`,
+    `**Lo que no ha funcionado:** ${bad.length ? bad.join(', ') : 'nada por debajo de 5'}.`,
+    `**Lo que debes cambiar:** ${top ? `${top.title}. ${top.detail}` : 'mantén lo que funciona; no añadas objetivos nuevos.'}`,
+    `**Tu prioridad de la próxima semana:** ${d.panel.goal?.nextAction ?? d.focus.now ?? 'define la próxima acción de tu objetivo principal'}.`,
+    '', COACH_PRO,
+  ].join('\n');
+}
+
+function coachGoals(d: any): string {
+  const g = d.goals as any[];
+  if (!g.length) return 'No tienes objetivos activos. Empieza por **3 objetivos de 90 días** medibles en **Coach → Objetivos** (o pídemelo: «crea un objetivo de 90 días…» si usas Claude).';
+  const label: Record<string, string> = { vision: 'Visión', annual: '12 meses', quarterly: '90 días', weekly: 'Esta semana' };
+  const lines: string[] = [];
+  for (const lv of ['vision', 'annual', 'quarterly', 'weekly']) {
+    const xs = g.filter((x) => x.level === lv);
+    if (!xs.length) continue;
+    lines.push(`**${label[lv]}**`, ...xs.map((x) => `- ${x.title}${lv === 'vision' ? '' : ` · ${x.progress} %${x.nextAction ? ` · próxima acción: ${x.nextAction}` : ' · ⚠ sin próxima acción'}`}`));
+  }
+  const warn = (d.insights as any[]).filter((i) => i.area === 'general').slice(0, 2);
+  if (warn.length) lines.push('', ...warn.map((i) => `⚠ ${i.title}`));
+  return lines.join('\n');
+}
+
+function coachDecision(d: any, text: string): string {
+  const x = (d.decisions as any[])[0];
+  if (!x) return `No encuentro esa decisión. Estructúrala en **Coach → Decisiones** (objetivo, opciones con ventajas, desventajas, riesgos y coste) y vuelve a pedírmelo${/«(.+)»/.exec(text) ? '' : ' con su nombre'}.`;
+  const lines = [`**DECISIÓN:** ${x.title}`, `**OBJETIVO:** ${x.objective ?? '⚠ sin definir: ¿qué quieres conseguir?'}`, '**OPCIONES:**'];
+  const gaps: string[] = [];
+  for (const o of x.options as any[]) {
+    lines.push(`- **${o.name}**`, `  - Ventajas: ${o.pros ?? '—'}`, `  - Desventajas: ${o.cons ?? '—'}`, `  - Riesgos: ${o.risks ?? '—'}`, `  - Coste: ${o.cost ?? '—'}`);
+    for (const [k, l] of [['pros', 'ventajas'], ['cons', 'desventajas'], ['risks', 'riesgos'], ['cost', 'coste']] as const) if (!o[k]) gaps.push(`${l} de «${o.name}»`);
+  }
+  lines.push(`**IMPACTO:** ${x.impact ?? '⚠ sin valorar (corto, medio y largo plazo)'}`, `**RECOMENDACIÓN:** ${x.recommendation ?? 'pendiente'}`, `**PRÓXIMA ACCIÓN:** ${x.nextAction ?? '⚠ sin definir'}`);
+  if (x.options.length < 2) gaps.push('una segunda opción (aunque sea «no hacer nada»)');
+  if (gaps.length) lines.push('', `Antes de decidir, completa: ${gaps.slice(0, 5).join(', ')}.`);
+  lines.push('', COACH_PRO);
+  return lines.join('\n');
+}
+
 export const localProvider: AIProvider = {
   id: 'local',
   async respond({ ctx, history }) {
@@ -188,12 +262,23 @@ export const localProvider: AIProvider = {
         const prop = proposalText(results.filter((r) => r.name === 'schedule_tasks'));
         return { content: `${weekText(plan?.data)}\n\n${prop}`.trim(), toolCalls: [] };
       }
+      if (intent.startsWith('coach_')) {
+        const r = results.find((x) => x.name === 'get_coach');
+        if (!r || r.error || !r.data) return { content: `No he podido consultar tu coach${r?.error ? `: ${r.error}` : ''}.`, toolCalls: [] };
+        const c = intent === 'coach_review' ? coachReview(r.data) : intent === 'coach_goals' ? coachGoals(r.data) : intent === 'coach_decision' ? coachDecision(r.data, text) : coachPanel(r.data);
+        return { content: c, toolCalls: [] };
+      }
       if (['shopping', 'task_create', 'event'].includes(intent)) return { content: proposalText(results), toolCalls: [] };
       return { content: composeRead(results), toolCalls: [] };
     }
 
     // Primera vuelta: decidir qué herramientas llamar.
     switch (intent) {
+      case 'coach_panel': case 'coach_review': case 'coach_goals': return { content: '', toolCalls: [call('get_coach', {})] };
+      case 'coach_decision': {
+        const m = /«([^»]{2,120})»/.exec(text) ?? /decision(?:\s+(?:de|sobre))?\s+(.{3,80})$/i.exec(fold(text));
+        return { content: '', toolCalls: [call('get_coach', m ? { decision: m[1]!.trim() } : {})] };
+      }
       case 'greeting': return { content: '¡Hola! Pregúntame por tu agenda, tareas, gastos… o pídeme que cree una tarea o un evento. Escribe «ayuda» para ver ejemplos.', toolCalls: [] };
       case 'agenda': {
         const w = parseWhen(text, ctx.now, ctx.tzOffset);

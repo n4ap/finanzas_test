@@ -1,10 +1,11 @@
-import { Bot, Briefcase, CalendarDays, CheckSquare, Heart, Home, LineChart, Mail, Newspaper, Plane, Settings, Target, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Bot, Briefcase, Compass, CalendarDays, CheckSquare, Heart, Home, LineChart, Mail, Newspaper, Plane, Settings, Target, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: LucideIcon; mobile?: boolean }
 
 export const NAV: { group: string; items: NavItem[] }[] = [
   { group: 'Principal', items: [
     { href: '/dashboard', label: 'Inicio', icon: Home, mobile: true },
+    { href: '/coach', label: 'Coach', icon: Compass },
     { href: '/focus', label: 'Focus', icon: Target },
     { href: '/assistant', label: 'Asistente IA', icon: Bot, mobile: true },
   ] },

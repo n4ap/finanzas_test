@@ -1,5 +1,5 @@
 'use client';
-import { AlertTriangle, Bell, CalendarClock, CheckSquare, CreditCard, Mail, Sparkles, TrendingUp, Zap } from 'lucide-react';
+import { AlertTriangle, Bell, CalendarClock, CheckSquare, Compass, CreditCard, Mail, Sparkles, TrendingUp, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Badge, Button, EmptyState } from '@/components/ui/primitives';
@@ -7,7 +7,7 @@ import { markAllNotificationsRead, markNotificationRead } from '@/server/actions
 
 export interface NotificationDTO { id: string; type: string; title: string; body: string | null; href: string | null; read: boolean; createdAt: string }
 
-const ICONS: Record<string, typeof Bell> = { email: Mail, event: CalendarClock, task: CheckSquare, payment: CreditCard, finance: TrendingUp, automation: Zap, ai: Sparkles };
+const ICONS: Record<string, typeof Bell> = { email: Mail, event: CalendarClock, task: CheckSquare, payment: CreditCard, finance: TrendingUp, automation: Zap, ai: Sparkles, coach: Compass };
 
 export function NotificationCenter({ items }: { items: NotificationDTO[] }) {
   const [open, setOpen] = useState(false);
