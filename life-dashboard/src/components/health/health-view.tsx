@@ -1,5 +1,5 @@
 'use client';
-import { Check, Dumbbell, Moon, Plus, Scale, Target, Trash2, Footprints } from 'lucide-react';
+import { Check, Dumbbell, FileUp, Moon, Plus, Scale, Target, Trash2, Footprints } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Meter } from '@/components/charts/bars';
 import { ChartCard } from '@/components/charts/chart-card';
@@ -11,7 +11,7 @@ import { METRIC_META, WORKOUT_LABEL, type MetricKind, type WorkoutKind } from '@
 import { cn, formatNumber } from '@/lib/utils';
 import { completeWorkoutAction, deleteMetricAction } from '@/server/actions/health';
 import type { HealthData } from '@/server/life/queries';
-import { GoalsForm, MetricForm, WorkoutForm, type WorkoutDTO } from './forms';
+import { GarminImport, GoalsForm, MetricForm, WorkoutForm, type WorkoutDTO } from './forms';
 
 type Tab = 'summary' | 'workouts' | 'log';
 const es = formatNumber;
@@ -33,6 +33,7 @@ export function HealthView({ d }: { d: HealthData }) {
   const [tab, setTab] = useState<Tab>('summary');
   const [metric, setMetric] = useState(false);
   const [goals, setGoals] = useState(false);
+  const [garmin, setGarmin] = useState(false);
   const [wk, setWk] = useState<{ open: boolean; workout?: WorkoutDTO | null }>({ open: false });
   const s = d.summary;
   const empty = d.metrics.length === 0 && d.workouts.length === 0;
@@ -44,12 +45,13 @@ export function HealthView({ d }: { d: HealthData }) {
         <h1 className="mr-auto text-xl font-semibold">Salud y deporte</h1>
         <Segmented label="Sección" value={tab} onChange={setTab} options={[{ value: 'summary', label: 'Resumen' }, { value: 'workouts', label: 'Entrenos' }, { value: 'log', label: 'Registro' }]} />
         <Button variant="outline" onClick={() => setGoals(true)}><Target size={16} /> Metas</Button>
+        <Button variant="outline" onClick={() => setGarmin(true)}><FileUp size={16} /> Importar de Garmin</Button>
         <Button variant="outline" onClick={() => setMetric(true)}><Plus size={16} /> Medición</Button>
         <Button onClick={() => setWk({ open: true })}><Plus size={16} /> Entreno</Button>
       </div>
-      <p className="text-xs text-muted-foreground">Datos introducidos por ti y guardados solo en tu cuenta. No se conectan relojes ni apps de salud todavía, y nada de esto es consejo médico.</p>
+      <p className="text-xs text-muted-foreground">Datos introducidos por ti o importados de Garmin, guardados solo en tu cuenta. Nada de esto es consejo médico.</p>
 
-      {empty && <Card className="p-6"><EmptyState icon={<Dumbbell size={28} />} title="Aún no hay datos de salud" hint="Registra tu peso, pasos o sueño, o añade un entreno." /></Card>}
+      {empty && <Card className="p-6"><EmptyState icon={<Dumbbell size={28} />} title="Aún no hay datos de salud" hint="Registra tu peso, pasos o sueño, impórtalos de Garmin o añade un entreno." /></Card>}
 
       {!empty && tab === 'summary' && (
         <>
@@ -89,6 +91,7 @@ export function HealthView({ d }: { d: HealthData }) {
       {tab === 'log' && <MetricLog metrics={d.metrics} />}
 
       <MetricForm key={String(metric)} open={metric} onClose={() => setMetric(false)} />
+      <GarminImport open={garmin} onClose={() => setGarmin(false)} />
       <WorkoutForm open={wk.open} onClose={() => setWk({ open: false })} workout={wk.workout} />
       <GoalsForm key={JSON.stringify(d.customGoals)} open={goals} onClose={() => setGoals(false)} goals={d.customGoals} />
     </div>
@@ -134,7 +137,7 @@ function MetricLog({ metrics }: { metrics: HealthData['metrics'] }) {
               <span className="w-20 shrink-0 text-xs text-muted-foreground">{dayLabel(m.date)}</span>
               <span className="flex-1">{meta?.label ?? m.kind}</span>
               <span className="font-medium tabular-nums">{es(m.value, meta?.decimals ?? 1)} {meta?.unit}</span>
-              {m.source !== 'manual' && <Badge>{m.source}</Badge>}
+              {m.source !== 'manual' && <Badge>{m.source === 'garmin' ? 'Garmin' : m.source}</Badge>}
               <Button variant="ghost" size="icon" className={cn('h-7 w-7 text-muted-foreground')} disabled={pending} aria-label={`Eliminar ${meta?.label ?? m.kind} del ${dayLabel(m.date)}`}
                 onClick={() => { if (confirm('¿Eliminar esta medición?')) run(() => deleteMetricAction(m.id)); }}><Trash2 size={14} /></Button>
             </li>

@@ -112,6 +112,12 @@ export function serialToDate(serial: number, date1904 = false): string {
   return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
 }
 
+/** Fracción de día → «H:MM». */
+export function serialToTime(fraction: number): string {
+  const mins = Math.round(fraction * 1440);
+  return `${Math.floor(mins / 60)}:${pad(mins % 60)}`;
+}
+
 /** Número con coma decimal y sin miles («-1234,5»), que el analizador de importes lee sin ambigüedad. */
 const numText = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
 
@@ -134,7 +140,8 @@ export function parseSheet(xml: string, shared: string[], dates: Set<number>, da
       else if (v !== undefined) {
         const n = Number(v);
         if (!Number.isFinite(n)) text = decodeXml(v);
-        else if (dates.has(Number(attr(tag, 's') ?? 0)) && n > 0 && n < 2_958_466) text = serialToDate(n, date1904);
+        else if (dates.has(Number(attr(tag, 's') ?? 0)) && n > 0 && n < 1) text = serialToTime(n); // solo hora o duración (p. ej. sueño «7:32»)
+        else if (dates.has(Number(attr(tag, 's') ?? 0)) && n >= 1 && n < 2_958_466) text = serialToDate(n, date1904);
         else text = numText(n);
       }
       while (row.length < idx) row.push('');

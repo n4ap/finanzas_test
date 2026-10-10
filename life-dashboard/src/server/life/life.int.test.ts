@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
 import { createMember, addShopping, clearDoneShopping, deleteMember, importShopping, setShoppingDone, updateMember } from './family';
-import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, saveMetric, setGoal, updateWorkout } from './health';
+import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, importHealthMetrics, saveMetric, setGoal, updateWorkout } from './health';
 import { createProject, deleteProject, updateProject } from './projects';
 import { addBooking, addDefaultPacking, addItineraryItem, addPackingItem, createTrip, deleteBooking, deleteItineraryItem, deleteTrip, setPacked, updateBooking, updateItineraryItem, updateTrip } from './travel';
 
@@ -36,6 +36,27 @@ describe('proyectos', () => {
 });
 
 describe('salud', () => {
+  it('importar de Garmin: sustituye el dato del día (también el manual), no duplica al reimportar y es por usuario', async () => {
+    await saveMetric(alice, { kind: 'steps', date: '2026-10-08', value: 5000 });
+    await saveMetric(alice, { kind: 'weight', date: '2026-10-08', value: 80 });
+    await saveMetric(bob, { kind: 'steps', date: '2026-10-08', value: 1234 });
+    const rows = [{ kind: 'steps', date: '2026-10-08', value: 10512 }, { kind: 'sleep', date: '2026-10-08', value: 7.53 }, { kind: 'steps', date: '2026-10-09', value: 7001 }];
+    expect(await importHealthMetrics(alice, { rows })).toEqual({ steps: 2, sleep: 1 });
+    expect(await importHealthMetrics(alice, { rows })).toEqual({ steps: 2, sleep: 1 });
+    const mine = await db.healthMetric.findMany({ where: { userId: alice }, orderBy: [{ date: 'asc' }, { kind: 'asc' }] });
+    expect(mine.map((m) => [m.kind, m.date.toISOString().slice(0, 10), m.value, m.source])).toEqual([
+      ['sleep', '2026-10-08', 7.53, 'garmin'], ['steps', '2026-10-08', 10512, 'garmin'], ['weight', '2026-10-08', 80, 'manual'], ['steps', '2026-10-09', 7001, 'garmin'],
+    ]);
+    expect(await db.healthMetric.findFirst({ where: { userId: bob } })).toMatchObject({ value: 1234, source: 'manual' });
+  });
+  it('importar de Garmin: valida rangos, días repetidos y tipos', async () => {
+    await expect(importHealthMetrics(alice, { rows: [] })).rejects.toThrow(/No hay datos/);
+    await expect(importHealthMetrics(alice, { rows: [{ kind: 'sleep', date: '2026-10-08', value: 30 }] })).rejects.toThrow(/fuera de rango/);
+    await expect(importHealthMetrics(alice, { rows: [{ kind: 'steps', date: '2026-10-08', value: 1 }, { kind: 'steps', date: '2026-10-08', value: 2 }] })).rejects.toThrow(/repetidos/);
+    await expect(importHealthMetrics(alice, { rows: [{ kind: 'weight', date: '2026-10-08', value: 80 }] })).rejects.toThrow();
+    expect(await db.healthMetric.count()).toBe(0);
+  });
+
   it('una medición por tipo y día: guardar de nuevo la sustituye', async () => {
     await saveMetric(alice, { kind: 'weight', date: '2026-10-07', value: 80 });
     await saveMetric(alice, { kind: 'weight', date: '2026-10-07', value: 79.4 });

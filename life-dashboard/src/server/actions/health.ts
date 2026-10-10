@@ -1,5 +1,5 @@
 'use server';
-import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, saveMetric, setGoal, updateWorkout } from '../life/health';
+import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, importHealthMetrics, saveMetric, setGoal, updateWorkout } from '../life/health';
 import { exec } from './exec';
 
 const PATHS = ['/health', '/dashboard'];
@@ -10,3 +10,4 @@ export async function updateWorkoutAction(id: string, input: unknown) { return e
 export async function completeWorkoutAction(id: string) { return exec((u) => completeWorkout(u, id), PATHS); }
 export async function deleteWorkoutAction(id: string) { return exec((u) => deleteWorkout(u, id), PATHS); }
 export async function setGoalAction(input: unknown) { return exec((u) => setGoal(u, input), PATHS); }
+export async function importHealthAction(input: unknown) { return exec((u) => importHealthMetrics(u, input), PATHS); }

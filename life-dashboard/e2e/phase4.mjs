@@ -1,5 +1,7 @@
 // E2E Fase 4: proyectos, salud, viajes y familia. Requiere app en marcha y seed fresco.
+import { writeFileSync } from 'node:fs';
 import { BASE, OUT, check, failures, launch, login, openSearch } from './helpers.mjs';
+import { makeXlsx } from './xlsx.mjs';
 
 const browser = await launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -60,7 +62,7 @@ check('salud: un único h1', (await page.locator('h1').count()) === 1);
 for (const k of ['Peso', 'Pasos (media 7 días)', 'Sueño (media 7 días)', 'Entrenos esta semana']) check(`salud: tile «${k}»`, (await page.locator(`p:has-text("${k}")`).count()) >= 1);
 check('salud: 4 gráficos con tabla alternativa', (await page.locator('button:has-text("Ver tabla")').count()) === 4 && (await page.locator('svg.recharts-surface').count()) >= 4);
 check('salud: eje del peso sin fechas ISO', !/2026-\d\d-\d\d/.test(await page.locator('section:has(h3:text-is("Peso"))').textContent()));
-check('salud: aviso de que no es consejo médico', /no es consejo médico|nada de esto es consejo médico/.test(await page.locator('main').textContent()));
+check('salud: aviso de que no es consejo médico', /no es consejo médico|nada de esto es consejo médico/i.test(await page.locator('main').textContent()));
 // Medición fuera de rango
 await page.click('button:has-text("Medición")');
 await dialog().locator('select[aria-label="Tipo de medición"]').selectOption('sleep');
@@ -97,6 +99,27 @@ await submit(); await closed();
 await tab('Resumen');
 await page.waitForSelector('text=Meta 12.000');
 check('salud: nueva meta de pasos reflejada con miles', true);
+// Importar de Garmin: informe de sueño (CSV) e informe de pasos (Excel)
+const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d; };
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+writeFileSync('/tmp/claude-0/shots/garmin-sueno.csv', `Informe de sueño\nFecha;Puntuación del sueño;Duración;Hora de acostarse\n${iso(ago(2))};78;7h 32min;23:10\n${iso(ago(1))};81;6h 15min;00:20\n`);
+writeFileSync('/tmp/claude-0/shots/garmin-pasos.xlsx', makeXlsx([['', 'Pasos reales', 'Objetivo'], [ago(2), 10512, 8000], [ago(1), 7001, 8000]]));
+await page.click('button:has-text("Importar de Garmin")');
+await page.setInputFiles('#garmin-file', '/tmp/claude-0/shots/garmin-sueno.csv');
+await page.waitForSelector('section[aria-label="Vista previa de Garmin"]');
+check('garmin: vista previa del sueño (2 noches, columna «Duración»)', /2<\/strong> noches de sueño/.test(await dialog().innerHTML()) && (await dialog().textContent()).includes('sueño «Duración»'));
+await dialog().locator('button:has-text("Importar 2 datos")').click();
+await page.waitForSelector('[role=dialog] [role=status]:has-text("2 noches de sueño")');
+await page.setInputFiles('#garmin-file', '/tmp/claude-0/shots/garmin-pasos.xlsx');
+await page.waitForSelector('section[aria-label="Vista previa de Garmin"]');
+check('garmin: el Excel de pasos se lee (2 días, ignora el objetivo)', (await dialog().textContent()).includes('10.512 pasos') && !(await dialog().textContent()).includes('8.000 pasos'));
+await dialog().locator('button:has-text("Importar 2 datos")').click();
+await page.waitForSelector('[role=dialog] [role=status]:has-text("2 días de pasos")');
+await dialog().locator('button:has-text("Cerrar")').click(); await closed();
+await tab('Registro');
+await page.waitForSelector('li:has-text("10.512")');
+check('garmin: datos importados en el registro con la etiqueta Garmin', (await page.locator('li:has-text("Garmin")').count()) >= 4);
+await tab('Resumen');
 await page.screenshot({ path: `${OUT}/p4-health-final.png`, fullPage: true });
 
 // ───────── Viajes ─────────

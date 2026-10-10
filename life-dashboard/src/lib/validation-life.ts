@@ -32,6 +32,14 @@ export const metricSchema = z.object({
 });
 export type MetricInput = z.input<typeof metricSchema>;
 
+/** Importación de pasos y sueño (Garmin): máximo 2 años de días, sin repetir tipo y día. */
+export const healthImportSchema = z.object({
+  rows: z.array(z.object({ kind: z.enum(['steps', 'sleep']), date: dateOnly, value: z.number().finite() }).superRefine((m, ctx) => {
+    const { min, max, label } = METRIC_META[m.kind];
+    if (m.value <= min || m.value > max) ctx.addIssue({ code: 'custom', path: ['value'], message: `${label}: valor fuera de rango (${m.date})` });
+  })).min(1, 'No hay datos que importar').max(1500, 'Demasiados días de golpe: importa como mucho 2 años'),
+}).refine((d) => new Set(d.rows.map((r) => `${r.kind}|${r.date}`)).size === d.rows.length, 'Hay días repetidos en el archivo');
+
 export const workoutSchema = z.object({
   kind: z.enum(WORKOUT_KINDS),
   title: z.string().trim().min(1, 'El título es obligatorio').max(100),

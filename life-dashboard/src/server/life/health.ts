@@ -1,6 +1,6 @@
 import 'server-only';
 import { db } from '@/lib/db';
-import { goalSchema, metricSchema, workoutSchema } from '@/lib/validation-life';
+import { goalSchema, healthImportSchema, metricSchema, workoutSchema } from '@/lib/validation-life';
 import { LIMITS, fail, issue, toNoon } from './core';
 
 /** Una medición manual por tipo y día: si ya existe, se sustituye (corregir un dato = volver a guardarlo). */
@@ -13,6 +13,21 @@ export async function saveMetric(userId: string, input: unknown) {
     create: { userId, kind: p.data.kind, date, value: p.data.value, source: 'manual' },
     update: { value: p.data.value },
   });
+}
+
+/**
+ * Importa pasos y sueño de Garmin (origen «garmin»). Un dato por tipo y día: lo importado sustituye a lo que hubiera
+ * ese día (también lo apuntado a mano) para no contar dos veces; reimportar el mismo archivo no duplica nada.
+ */
+export async function importHealthMetrics(userId: string, input: unknown) {
+  const p = healthImportSchema.safeParse(input);
+  if (!p.success) return fail(issue(p.error));
+  const rows = p.data.rows.map((r) => ({ kind: r.kind, date: toNoon(r.date), value: r.value }));
+  await db.$transaction([
+    db.healthMetric.deleteMany({ where: { userId, OR: rows.map((r) => ({ kind: r.kind, date: r.date })) } }),
+    db.healthMetric.createMany({ data: rows.map((r) => ({ userId, ...r, source: 'garmin' })) }),
+  ]);
+  return { steps: rows.filter((r) => r.kind === 'steps').length, sleep: rows.filter((r) => r.kind === 'sleep').length };
 }
 
 export async function deleteMetric(userId: string, id: string) {
