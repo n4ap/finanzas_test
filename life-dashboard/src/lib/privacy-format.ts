@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CAPTION_MAX, POST_STATUSES, POST_TYPES } from './content';
 import { NEWS_CATEGORY_IDS } from './news';
 
 /**
@@ -60,6 +61,10 @@ export const exportSchema = z.object({
       impact: optText(800), recommendation: optText(1500), nextAction: optText(200), status: z.enum(['open', 'decided']), chosen: optText(120),
     }), 200),
   }).default({ answers: [], goals: [], reviews: [], decisions: [] }),
+  contentPosts: arr(z.object({
+    platform: text(20).default('tiktok'), title: text(120), caption: optText(CAPTION_MAX), hashtags: optText(300), type: z.enum(POST_TYPES), status: z.enum(POST_STATUSES),
+    scheduledAt: optIso, publishedAt: optIso, notes: optText(1000), createdAt: iso,
+  }), 2000),
   /** Solo informativo (historial de cambios financieros): no se importa. */
   auditLog: z.array(z.unknown()).optional(),
 });

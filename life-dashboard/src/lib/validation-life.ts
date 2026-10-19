@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CAPTION_MAX, POST_STATUSES, POST_TYPES } from './content';
 import { GOAL_KINDS, GOAL_META, METRIC_KINDS, METRIC_META, WORKOUT_KINDS } from './health';
 import { PROJECT_STATUSES } from './projects';
 import { BOOKING_KINDS, MAX_TRIP_DAYS } from './travel';
@@ -101,3 +102,19 @@ export const familySchema = z.object({
   notes: optText(1000),
 });
 export type FamilyInput = z.input<typeof familySchema>;
+
+// ── Contenido (TikTok)
+const postDateTime = z.preprocess(emptyToUndef, z.string().datetime({ offset: true, message: 'Fecha no válida' }).optional());
+export const contentPostSchema = z.object({
+  title: z.string().trim().min(1, 'El título es obligatorio').max(120),
+  caption: optText(CAPTION_MAX),
+  hashtags: optText(300),
+  type: z.enum(POST_TYPES).default('video'),
+  status: z.enum(POST_STATUSES).default('idea'),
+  scheduledAt: postDateTime,
+  publishedAt: postDateTime,
+  notes: optText(1000),
+}).superRefine((p, ctx) => {
+  if (p.status === 'scheduled' && !p.scheduledAt) ctx.addIssue({ code: 'custom', path: ['scheduledAt'], message: 'Indica la fecha y hora de publicación' });
+});
+export const contentStatusSchema = z.enum(POST_STATUSES);

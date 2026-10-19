@@ -52,6 +52,7 @@ model User {
   goals         Goal[]
   reviews       Review[]
   decisions     Decision[]
+  contentPosts  ContentPost[]
 }
 
 /// Sesión con token opaco; en BD solo se guarda su hash SHA-256.
@@ -659,4 +660,24 @@ model Decision {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
+}
+
+/// Contenido para redes (de momento TikTok): ideas, borradores, programadas y publicadas.
+model ContentPost {
+  id          String    @id @default(cuid())
+  userId      String
+  platform    String    @default("tiktok")
+  title       String
+  caption     String? // subtítulo / texto que acompaña a la publicación
+  hashtags    String?
+  type        String    @default("video") // video | carousel | photo | live | story
+  status      String    @default("idea") // idea | draft | scheduled | published
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, platform, status])
 }

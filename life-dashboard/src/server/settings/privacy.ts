@@ -14,7 +14,7 @@ const dec = (d: { toString(): string } | null) => (d == null ? null : d.toString
 
 /** Todos los datos PROPIOS del usuario en un único JSON portable. Sin contraseña, sesiones, claves ni tokens de conexiones. */
 export async function exportUserData(userId: string, now = new Date()): Promise<ExportFileInput> {
-  const [u, projects, tasks, calendars, emails, accounts, budgets, portfolios, workouts, metrics, goals, trips, family, shopping, automations, conversations, audit, coachAnswers, coachGoals, reviews, decisions] = await Promise.all([
+  const [u, projects, tasks, calendars, emails, accounts, budgets, portfolios, workouts, metrics, goals, trips, family, shopping, automations, conversations, audit, coachAnswers, coachGoals, reviews, decisions, contentPosts] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId } }),
     db.project.findMany({ where: { userId } }),
     db.task.findMany({ where: { userId } }),
@@ -36,6 +36,7 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
     db.goal.findMany({ where: { userId } }),
     db.review.findMany({ where: { userId }, orderBy: [{ kind: 'asc' }, { period: 'asc' }] }),
     db.decision.findMany({ where: { userId } }),
+    db.contentPost.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
   ]);
   const prefs = (u.preferences ?? {}) as { followedNews?: string[] };
   return {
@@ -62,6 +63,7 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
       reviews: reviews.map((r) => ({ kind: r.kind as 'daily', period: r.period, answers: r.answers as Record<string, string>, scores: (r.scores ?? null) as Record<string, number> | null, energy: r.energy, mood: r.mood, stress: r.stress })),
       decisions: decisions.map((x) => ({ title: x.title, objective: x.objective, options: x.options as { name: string }[], impact: x.impact, recommendation: x.recommendation, nextAction: x.nextAction, status: x.status as 'open', chosen: x.chosen })),
     },
+    contentPosts: contentPosts.map((c) => ({ platform: c.platform, title: c.title, caption: c.caption, hashtags: c.hashtags, type: c.type as 'video', status: c.status as 'idea', scheduledAt: optIso(c.scheduledAt), publishedAt: optIso(c.publishedAt), notes: c.notes, createdAt: iso(c.createdAt) })),
     auditLog: audit.map((a) => ({ entity: a.entity, entityId: a.entityId, action: a.action, before: a.before, after: a.after, createdAt: iso(a.createdAt) })),
   };
 }
@@ -175,6 +177,10 @@ export async function importUserData(userId: string, raw: string): Promise<Impor
       await tx.decision.createMany({ data: f.coach.decisions.map((x) => ({ userId, title: x.title, objective: x.objective ?? null, options: x.options as Prisma.InputJsonValue, impact: x.impact ?? null, recommendation: x.recommendation ?? null, nextAction: x.nextAction ?? null, status: x.status, chosen: x.chosen ?? null })) });
       bump('decisiones', f.coach.decisions.length);
     }
+    if (f.contentPosts.length) {
+      await tx.contentPost.createMany({ data: f.contentPosts.map((c) => ({ userId, platform: c.platform, title: c.title, caption: c.caption ?? null, hashtags: c.hashtags ?? null, type: c.type, status: c.status, scheduledAt: dn(c.scheduledAt), publishedAt: dn(c.publishedAt), notes: c.notes ?? null, createdAt: d(c.createdAt) })) });
+      bump('publicaciones', f.contentPosts.length);
+    }
   }, { timeout: 120_000, maxWait: 10_000 });
   } catch (e) {
     if (e instanceof ServiceError) throw e;
@@ -238,6 +244,7 @@ async function wipe(tx: Tx, userId: string) {
   await tx.goal.deleteMany({ where: { userId } });
   await tx.review.deleteMany({ where: { userId } });
   await tx.decision.deleteMany({ where: { userId } });
+  await tx.contentPost.deleteMany({ where: { userId } });
 }
 
 /** Borra TODOS los datos del usuario pero conserva su cuenta, perfil y sesión. Pide la contraseña. */

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
+import { createContentPost, deleteContentPost, listContentPosts, setContentStatus, updateContentPost } from './content';
 import { createMember, addShopping, clearDoneShopping, deleteMember, importShopping, setShoppingDone, updateMember } from './family';
 import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, importHealthMetrics, saveMetric, setGoal, updateWorkout } from './health';
 import { createProject, deleteProject, updateProject } from './projects';
@@ -171,5 +172,35 @@ describe('importar lista de la compra', () => {
     await expect(importShopping(alice, ' \n ')).rejects.toThrow(/No hay artículos/);
     await expect(importShopping(alice, 'a'.repeat(20_001))).rejects.toThrow(/demasiado largo/);
     await expect(importShopping(alice, 42)).rejects.toThrow();
+  });
+});
+
+describe('contenido (TikTok)', () => {
+  it('CRUD propio: hashtags normalizados; otro usuario no ve, edita ni borra', async () => {
+    const id = await createContentPost(alice, { title: 'Revisión de motor', caption: 'Un día en el hangar', hashtags: 'aviacion, #mecanico', type: 'video', status: 'idea' });
+    expect(await listContentPosts(bob)).toEqual([]);
+    expect((await listContentPosts(alice))[0]).toMatchObject({ id, status: 'idea', hashtags: '#aviacion #mecanico', scheduledAt: null });
+    await expect(updateContentPost(bob, id, { title: 'x' })).rejects.toThrow(/no encontrada/);
+    await expect(setContentStatus(bob, id, 'draft')).rejects.toThrow(/no encontrada/);
+    await expect(deleteContentPost(bob, id)).rejects.toThrow(/no encontrada/);
+    await deleteContentPost(alice, id);
+    expect(await listContentPosts(alice)).toEqual([]);
+  });
+  it('programar exige fecha; publicar guarda la fecha y volver atrás la quita', async () => {
+    await expect(createContentPost(alice, { title: 'Sin fecha', status: 'scheduled' })).rejects.toThrow(/fecha y hora/);
+    const id = await createContentPost(alice, { title: 'Borrador', status: 'draft' });
+    await expect(setContentStatus(alice, id, 'scheduled')).rejects.toThrow(/fecha y hora/);
+    await expect(setContentStatus(alice, id, 'raro')).rejects.toThrow(/no válido/);
+    await updateContentPost(alice, id, { title: 'Borrador', status: 'scheduled', scheduledAt: '2026-10-01T18:00:00.000Z' });
+    await setContentStatus(alice, id, 'published');
+    // La programada ya pasó: se toma su fecha como la de publicación.
+    expect((await listContentPosts(alice))[0]).toMatchObject({ status: 'published', publishedAt: '2026-10-01T18:00:00.000Z' });
+    await setContentStatus(alice, id, 'draft');
+    expect((await listContentPosts(alice))[0]).toMatchObject({ status: 'draft', publishedAt: null });
+  });
+  it('valida tipo, estado y longitud del subtítulo', async () => {
+    await expect(createContentPost(alice, { title: '' })).rejects.toThrow(/obligatorio/);
+    await expect(createContentPost(alice, { title: 'x', type: 'reel' })).rejects.toThrow();
+    await expect(createContentPost(alice, { title: 'x', caption: 'a'.repeat(2201) })).rejects.toThrow();
   });
 });
