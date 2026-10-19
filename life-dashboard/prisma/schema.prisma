@@ -53,6 +53,7 @@ model User {
   reviews       Review[]
   decisions     Decision[]
   contentPosts  ContentPost[]
+  competitors   Competitor[]
 }
 
 /// Sesión con token opaco; en BD solo se guarda su hash SHA-256.
@@ -662,7 +663,7 @@ model Decision {
   @@index([userId, status])
 }
 
-/// Contenido para redes (de momento TikTok): ideas, borradores, programadas y publicadas.
+/// Contenido para redes (YouTube y TikTok): ideas, borradores, programadas y publicadas, con sus resultados anotados a mano.
 model ContentPost {
   id          String    @id @default(cuid())
   userId      String
@@ -670,14 +671,49 @@ model ContentPost {
   title       String
   caption     String? // subtítulo / texto que acompaña a la publicación
   hashtags    String?
-  type        String    @default("video") // video | carousel | photo | live | story
+  type        String    @default("video") // video | short | carousel | photo | live | story | community
   status      String    @default("idea") // idea | draft | scheduled | published
   scheduledAt DateTime?
   publishedAt DateTime?
   notes       String?
+  views       Int?
+  likes       Int?
+  comments    Int?
+  shares      Int?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, platform, status])
+}
+
+/// Cuenta que sigues de cerca (competencia o la tuya propia, `mine`), con su evolución anotada a mano.
+model Competitor {
+  id        String               @id @default(cuid())
+  userId    String
+  platform  String // youtube | tiktok
+  name      String
+  handle    String?
+  url       String?
+  notes     String?
+  mine      Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  snapshots CompetitorSnapshot[]
+
+  @@index([userId])
+}
+
+/// Datos de una cuenta en un día: uno por día (anotarlo otra vez ese día lo sustituye).
+model CompetitorSnapshot {
+  id           String     @id @default(cuid())
+  competitorId String
+  date         DateTime // mediodía UTC del día
+  followers    Int
+  avgViews     Int?
+  posts        Int?
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, date])
 }

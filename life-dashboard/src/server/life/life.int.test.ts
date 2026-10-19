@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '@/lib/db';
-import { createContentPost, deleteContentPost, listContentPosts, setContentStatus, updateContentPost } from './content';
+import { addSnapshot, createCompetitor, createContentPost, deleteCompetitor, deleteContentPost, deleteSnapshot, listCompetitors, listContentPosts, setContentKeywords, setContentStatus, updateCompetitor, updateContentPost } from './content';
 import { createMember, addShopping, clearDoneShopping, deleteMember, importShopping, setShoppingDone, updateMember } from './family';
 import { completeWorkout, createWorkout, deleteMetric, deleteWorkout, importHealthMetrics, saveMetric, setGoal, updateWorkout } from './health';
 import { createProject, deleteProject, updateProject } from './projects';
@@ -175,9 +175,9 @@ describe('importar lista de la compra', () => {
   });
 });
 
-describe('contenido (TikTok)', () => {
+describe('contenido (YouTube y TikTok)', () => {
   it('CRUD propio: hashtags normalizados; otro usuario no ve, edita ni borra', async () => {
-    const id = await createContentPost(alice, { title: 'Revisión de motor', caption: 'Un día en el hangar', hashtags: 'aviacion, #mecanico', type: 'video', status: 'idea' });
+    const id = await createContentPost(alice, { platform: 'tiktok', title: 'Revisión de motor', caption: 'Un día en el hangar', hashtags: 'aviacion, #mecanico', type: 'video', status: 'idea' });
     expect(await listContentPosts(bob)).toEqual([]);
     expect((await listContentPosts(alice))[0]).toMatchObject({ id, status: 'idea', hashtags: '#aviacion #mecanico', scheduledAt: null });
     await expect(updateContentPost(bob, id, { title: 'x' })).rejects.toThrow(/no encontrada/);
@@ -187,8 +187,8 @@ describe('contenido (TikTok)', () => {
     expect(await listContentPosts(alice)).toEqual([]);
   });
   it('programar exige fecha; publicar guarda la fecha y volver atrás la quita', async () => {
-    await expect(createContentPost(alice, { title: 'Sin fecha', status: 'scheduled' })).rejects.toThrow(/fecha y hora/);
-    const id = await createContentPost(alice, { title: 'Borrador', status: 'draft' });
+    await expect(createContentPost(alice, { platform: 'tiktok', title: 'Sin fecha', status: 'scheduled' })).rejects.toThrow(/fecha y hora/);
+    const id = await createContentPost(alice, { platform: 'tiktok', title: 'Borrador', status: 'draft' });
     await expect(setContentStatus(alice, id, 'scheduled')).rejects.toThrow(/fecha y hora/);
     await expect(setContentStatus(alice, id, 'raro')).rejects.toThrow(/no válido/);
     await updateContentPost(alice, id, { title: 'Borrador', status: 'scheduled', scheduledAt: '2026-10-01T18:00:00.000Z' });
@@ -199,8 +199,47 @@ describe('contenido (TikTok)', () => {
     expect((await listContentPosts(alice))[0]).toMatchObject({ status: 'draft', publishedAt: null });
   });
   it('valida tipo, estado y longitud del subtítulo', async () => {
-    await expect(createContentPost(alice, { title: '' })).rejects.toThrow(/obligatorio/);
-    await expect(createContentPost(alice, { title: 'x', type: 'reel' })).rejects.toThrow();
-    await expect(createContentPost(alice, { title: 'x', caption: 'a'.repeat(2201) })).rejects.toThrow();
+    await expect(createContentPost(alice, { platform: 'tiktok', title: '' })).rejects.toThrow(/obligatorio/);
+    await expect(createContentPost(alice, { title: 'Sin plataforma' })).rejects.toThrow();
+    await expect(createContentPost(alice, { platform: 'tiktok', title: 'x', type: 'reel' })).rejects.toThrow();
+    await expect(createContentPost(alice, { platform: 'tiktok', title: 'x', caption: 'a'.repeat(2201) })).rejects.toThrow(/2200/);
+    await expect(createContentPost(alice, { platform: 'youtube', title: 'x', type: 'carousel' })).rejects.toThrow(/YouTube no admite «Carrusel»/);
+    await expect(createContentPost(alice, { platform: 'youtube', title: 'x'.repeat(101) })).rejects.toThrow(/100/);
+    expect(await createContentPost(alice, { platform: 'youtube', title: 'Largo', type: 'short', caption: 'a'.repeat(4000) })).toBeTruthy(); // YouTube admite 5000
+  });
+  it('resultados: solo se guardan publicada; editar conserva la plataforma; volver a borrador los borra', async () => {
+    const id = await createContentPost(alice, { platform: 'youtube', title: 'Motor', type: 'video', status: 'draft', views: '999' });
+    expect((await listContentPosts(alice, 'youtube'))[0]).toMatchObject({ views: null });
+    await updateContentPost(alice, id, { platform: 'tiktok', title: 'Motor', type: 'video', status: 'published', views: '12.500', likes: '800', comments: '', shares: '30' });
+    expect((await listContentPosts(alice, 'youtube'))[0]).toMatchObject({ platform: 'youtube', status: 'published', views: 12500, likes: 800, comments: null, shares: 30 });
+    expect(await listContentPosts(alice, 'tiktok')).toEqual([]);
+    await expect(updateContentPost(alice, id, { title: 'Motor', status: 'published', views: '-3' })).rejects.toThrow(/negativo/);
+    await setContentStatus(alice, id, 'draft');
+    expect((await listContentPosts(alice))[0]).toMatchObject({ status: 'draft', views: null, publishedAt: null });
+  });
+});
+
+describe('competencia y palabras clave', () => {
+  it('cuentas por usuario; un dato por día (se sustituye) y borrar la cuenta borra sus datos', async () => {
+    const id = await createCompetitor(alice, { platform: 'youtube', name: 'Canal Aviación', handle: '@@aviacion', url: 'https://www.youtube.com/@aviacion' });
+    await expect(createCompetitor(alice, { platform: 'youtube', name: 'x', url: 'javascript:alert(1)' })).rejects.toThrow();
+    await expect(updateCompetitor(bob, id, { platform: 'youtube', name: 'Robado' })).rejects.toThrow(/no encontrada/);
+    await expect(addSnapshot(bob, id, { date: '2026-10-01', followers: 5 })).rejects.toThrow(/no encontrada/);
+    await addSnapshot(alice, id, { date: '2026-10-01', followers: '1.000' });
+    await addSnapshot(alice, id, { date: '2026-10-01', followers: 1100, avgViews: '250' });
+    await addSnapshot(alice, id, { date: '2026-10-15', followers: 1300 });
+    const [c] = await listCompetitors(alice);
+    expect(c).toMatchObject({ handle: 'aviacion', mine: false, snapshots: [{ date: '2026-10-01', followers: 1100, avgViews: 250 }, { date: '2026-10-15', followers: 1300 }] });
+    expect(await listCompetitors(bob)).toEqual([]);
+    await expect(deleteSnapshot(bob, c!.snapshots[0]!.id)).rejects.toThrow(/no encontrado/);
+    await deleteSnapshot(alice, c!.snapshots[0]!.id);
+    await deleteCompetitor(alice, id);
+    expect(await db.competitorSnapshot.count()).toBe(0);
+  });
+  it('palabras clave: sin repetidos y sin pisar otras preferencias', async () => {
+    await db.user.update({ where: { id: alice }, data: { preferences: { followedNews: ['ia'] } } });
+    await setContentKeywords(alice, ['TikTok', 'tiktok', ' Boeing ']);
+    expect((await db.user.findUnique({ where: { id: alice } }))!.preferences).toEqual({ followedNews: ['ia'], contentKeywords: ['TikTok', 'Boeing'] });
+    await expect(setContentKeywords(alice, Array.from({ length: 21 }, (_, i) => `k${i}`))).rejects.toThrow(/20/);
   });
 });

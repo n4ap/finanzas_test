@@ -1,4 +1,4 @@
-import { Bot, Briefcase, Clapperboard, Compass, CalendarDays, CheckSquare, Heart, Home, LineChart, Mail, Newspaper, Plane, Settings, Target, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Bot, Briefcase, CalendarRange, ChartColumn, Compass, Music2, Play, Rss, Telescope, CalendarDays, CheckSquare, Heart, Home, LineChart, Mail, Newspaper, Plane, Settings, Target, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 
 export interface NavItem { href: string; label: string; icon: LucideIcon; mobile?: boolean }
 
@@ -17,7 +17,12 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     { href: '/news', label: 'Noticias', icon: Newspaper },
   ] },
   { group: 'Contenido', items: [
-    { href: '/content', label: 'TikTok', icon: Clapperboard },
+    { href: '/content/youtube', label: 'YouTube', icon: Play },
+    { href: '/content/tiktok', label: 'TikTok', icon: Music2 },
+    { href: '/content/calendar', label: 'Calendario editorial', icon: CalendarRange },
+    { href: '/content/analytics', label: 'Análisis', icon: ChartColumn },
+    { href: '/content/competitors', label: 'Competencia', icon: Telescope },
+    { href: '/content/news', label: 'Noticias del sector', icon: Rss },
   ] },
   { group: 'Dinero', items: [
     { href: '/finance', label: 'Finanzas', icon: Wallet, mobile: true },
@@ -37,3 +42,6 @@ export const NAV: { group: string; items: NavItem[] }[] = [
 /** Orden de la barra inferior móvil: Inicio, Tareas, Calendario, Finanzas, IA. */
 export const MOBILE_NAV: NavItem[] = ['/dashboard', '/tasks', '/calendar', '/finance', '/assistant']
   .map((h) => NAV.flatMap((g) => g.items).find((i) => i.href === h)!);
+
+/** Secciones del estudio de contenido (también su barra de pestañas propia, útil en el móvil). */
+export const CONTENT_NAV: NavItem[] = NAV.find((g) => g.group === 'Contenido')!.items;

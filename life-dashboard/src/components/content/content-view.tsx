@@ -1,21 +1,21 @@
 'use client';
-import { AlertTriangle, CalendarClock, CheckCircle2, Clapperboard, FileEdit, ListTodo, Pencil, Plus, Send } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, Clapperboard, Eye, FileEdit, ListTodo, Pencil, Plus, Send } from 'lucide-react';
 import { useState } from 'react';
 import { Badge, Button, EmptyState, Segmented } from '@/components/ui/primitives';
 import { useRun } from '@/components/ui/use-run';
-import { POST_STATUS_LABEL, POST_TYPE_LABEL, contentBoard, isOverdue, type PostStatus } from '@/lib/content';
+import { PLATFORM_META, POST_STATUS_LABEL, POST_TYPE_LABEL, contentBoard, isOverdue, type Platform, type PostStatus } from '@/lib/content';
 import { cn } from '@/lib/utils';
 import { setContentStatusAction } from '@/server/actions/content';
 import type { ContentPostDTO } from '@/server/life/content';
-import { PostForm } from './post-form';
+import { PostForm, fmtWhen } from './post-form';
+import { PlatformMark, SectionHeader } from './shell';
 
 type Tab = 'scheduled' | 'drafts' | 'published' | 'pending';
 const TABS: { value: Tab; label: string }[] = [
   { value: 'scheduled', label: 'Programadas' }, { value: 'drafts', label: 'Borradores' }, { value: 'published', label: 'Publicadas' }, { value: 'pending', label: 'Pendientes' },
 ];
-const STATUS_TONE: Record<PostStatus, 'neutral' | 'important' | 'primary' | 'success'> = { idea: 'neutral', draft: 'important', scheduled: 'primary', published: 'success' };
+export const STATUS_TONE: Record<PostStatus, 'neutral' | 'important' | 'primary' | 'success'> = { idea: 'neutral', draft: 'important', scheduled: 'primary', published: 'success' };
 
-const fmtWhen = (s: string) => new Date(s).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }).replace(/\./g, '');
 
 function dateLine(p: ContentPostDTO) {
   if (p.status === 'published' && p.publishedAt) return `Publicada · ${fmtWhen(p.publishedAt)}`;
@@ -52,6 +52,7 @@ function PostCard({ p, now, onEdit, onSchedule }: { p: ContentPostDTO; now: Date
       {p.caption && <p className="mt-1 line-clamp-3 whitespace-pre-line text-sm text-muted-foreground">{p.caption}</p>}
       {p.hashtags && <p className="mt-1 line-clamp-1 text-xs text-primary">{p.hashtags}</p>}
       <p className={cn('mt-3 flex items-center gap-1.5 text-xs', late ? 'text-danger' : 'text-muted-foreground')}><CalendarClock size={14} aria-hidden className="shrink-0" />{dateLine(p)}</p>
+      {p.status === 'published' && <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground"><Eye size={14} aria-hidden className="shrink-0" />{p.views !== null ? `${p.views.toLocaleString('es-ES')} visualizaciones` : 'Sin resultados anotados (pulsa Editar)'}</p>}
       {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
       <div className="mt-auto flex flex-wrap gap-2 pt-3">
         <Button size="sm" variant="outline" onClick={onEdit} aria-label={`Editar «${p.title}»`}><Pencil size={14} /> Editar</Button>
@@ -91,7 +92,8 @@ const EMPTY: Record<Tab, { title: string; hint: string }> = {
   pending: { title: 'Nada pendiente', hint: 'Todo lo que tenías está publicado.' },
 };
 
-export function ContentView({ posts }: { posts: ContentPostDTO[] }) {
+export function ContentView({ platform, posts }: { platform: Platform; posts: ContentPostDTO[] }) {
+  const meta = PLATFORM_META[platform];
   const [now] = useState(() => new Date());
   const [tab, setTab] = useState<Tab>('scheduled');
   const [form, setForm] = useState<{ post: ContentPostDTO | null; preset?: PostStatus } | null>(null);
@@ -99,16 +101,10 @@ export function ContentView({ posts }: { posts: ContentPostDTO[] }) {
   const s = board.stats;
   const list = board[tab];
   return (
-    // El panel es siempre oscuro, independientemente del tema de la app.
-    <div className="dark space-y-4 rounded-3xl border bg-background p-4 text-foreground sm:p-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <span aria-hidden className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-cyan-400 to-pink-500 text-white"><Clapperboard size={20} /></span>
-        <div className="mr-auto">
-          <h1 className="text-xl font-semibold">TikTok</h1>
-          <p className="text-xs text-muted-foreground">Panel de contenido: ideas, borradores, programadas y publicadas</p>
-        </div>
+    <div className="space-y-4">
+      <SectionHeader icon={<PlatformMark platform={platform} />} title={meta.label} hint={`Administrador de ${meta.label}: ideas, borradores, programadas y publicadas`}>
         <Button onClick={() => setForm({ post: null })}><Plus size={16} /> Nueva idea</Button>
-      </div>
+      </SectionHeader>
 
       <section aria-label="Resumen" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={<CalendarClock size={14} />} label="Programadas" value={s.scheduled} hint={`${s.thisWeek} en los próximos 7 días`} active={tab === 'scheduled'} onClick={() => setTab('scheduled')} />
@@ -117,7 +113,7 @@ export function ContentView({ posts }: { posts: ContentPostDTO[] }) {
         <Stat icon={<ListTodo size={14} />} label="Pendientes" value={s.pending} hint={s.overdue ? `${s.overdue} ${s.overdue === 1 ? 'atrasada' : 'atrasadas'}` : 'Sin atrasos'} alert={s.overdue > 0} active={tab === 'pending'} onClick={() => setTab('pending')} />
       </section>
 
-      <div className="-mx-1 overflow-x-auto px-1 pb-1"><Segmented label="Sección de contenido" value={tab} onChange={setTab} options={TABS} /></div>
+      <div className="-mx-1 overflow-x-auto px-1 pb-1"><Segmented label={`Publicaciones de ${meta.label}`} value={tab} onChange={setTab} options={TABS} /></div>
 
       <section aria-label={TABS.find((t) => t.value === tab)!.label}>
         {list.length === 0 ? (
@@ -131,7 +127,7 @@ export function ContentView({ posts }: { posts: ContentPostDTO[] }) {
         )}
       </section>
 
-      {form && <PostForm key={form.post?.id ?? 'new'} open onClose={() => setForm(null)} post={form.post} preset={form.preset} />}
+      {form && <PostForm key={form.post?.id ?? 'new'} open onClose={() => setForm(null)} platform={platform} post={form.post} preset={form.preset} />}
     </div>
   );
 }

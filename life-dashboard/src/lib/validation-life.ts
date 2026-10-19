@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CAPTION_MAX, POST_STATUSES, POST_TYPES } from './content';
+import { CAPTION_MAX, PLATFORMS, PLATFORM_META, POST_STATUSES, POST_TYPES, POST_TYPE_LABEL } from './content';
 import { GOAL_KINDS, GOAL_META, METRIC_KINDS, METRIC_META, WORKOUT_KINDS } from './health';
 import { PROJECT_STATUSES } from './projects';
 import { BOOKING_KINDS, MAX_TRIP_DAYS } from './travel';
@@ -103,9 +103,11 @@ export const familySchema = z.object({
 });
 export type FamilyInput = z.input<typeof familySchema>;
 
-// ── Contenido (TikTok)
+// ── Contenido (YouTube y TikTok)
 const postDateTime = z.preprocess(emptyToUndef, z.string().datetime({ offset: true, message: 'Fecha no válida' }).optional());
+const count = (label: string) => z.preprocess((v) => (typeof v === 'string' ? v.replace(/[.\s]/g, '') : v), z.preprocess(emptyToUndef, z.coerce.number({ message: `${label}: escribe un número` }).int(`${label}: sin decimales`).min(0, `${label} no puede ser negativo`).max(2_000_000_000).optional()));
 export const contentPostSchema = z.object({
+  platform: z.enum(PLATFORMS),
   title: z.string().trim().min(1, 'El título es obligatorio').max(120),
   caption: optText(CAPTION_MAX),
   hashtags: optText(300),
@@ -114,7 +116,29 @@ export const contentPostSchema = z.object({
   scheduledAt: postDateTime,
   publishedAt: postDateTime,
   notes: optText(1000),
+  views: count('Visualizaciones'), likes: count('Me gusta'), comments: count('Comentarios'), shares: count('Compartidos'),
 }).superRefine((p, ctx) => {
+  const meta = PLATFORM_META[p.platform];
   if (p.status === 'scheduled' && !p.scheduledAt) ctx.addIssue({ code: 'custom', path: ['scheduledAt'], message: 'Indica la fecha y hora de publicación' });
+  if (!meta.types.includes(p.type)) ctx.addIssue({ code: 'custom', path: ['type'], message: `${meta.label} no admite «${POST_TYPE_LABEL[p.type]}»` });
+  if (p.title.length > meta.titleMax) ctx.addIssue({ code: 'custom', path: ['title'], message: `En ${meta.label} el título admite como máximo ${meta.titleMax} caracteres` });
+  if ((p.caption?.length ?? 0) > meta.captionMax) ctx.addIssue({ code: 'custom', path: ['caption'], message: `En ${meta.label} el texto admite como máximo ${meta.captionMax} caracteres` });
 });
 export const contentStatusSchema = z.enum(POST_STATUSES);
+
+const day = dateOnly;
+export const competitorSchema = z.object({
+  platform: z.enum(PLATFORMS),
+  name: z.string().trim().min(1, 'El nombre es obligatorio').max(80),
+  handle: optText(60),
+  url: z.preprocess(emptyToUndef, z.string().trim().max(300).url('Enlace no válido').refine((u) => /^https?:\/\//i.test(u), 'El enlace debe empezar por http:// o https://').optional()),
+  notes: optText(1000),
+  mine: z.boolean().default(false),
+});
+export const snapshotSchema = z.object({
+  date: day,
+  followers: z.preprocess((v) => (typeof v === 'string' ? v.replace(/[.\s]/g, '') : v), z.coerce.number({ message: 'Seguidores: escribe un número' }).int('Seguidores: sin decimales').min(0).max(5_000_000_000)),
+  avgViews: count('Media de visualizaciones'),
+  posts: count('Publicaciones'),
+});
+export const contentKeywordsSchema = z.array(z.string().trim().min(1).max(40)).max(20, 'Como máximo 20 palabras clave');

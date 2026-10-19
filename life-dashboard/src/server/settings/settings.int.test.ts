@@ -36,6 +36,8 @@ async function seedRich(userId: string) {
   await db.familyMember.create({ data: { userId, name: 'Mamá', relation: 'Madre', birthday: noon('1962-10-11'), color: '#10b981', notes: 'Flores' } });
   await db.shoppingItem.create({ data: { userId, label: 'Leche', done: true } });
   await db.contentPost.create({ data: { userId, title: 'Hangar', caption: 'Un día de trabajo', hashtags: '#aviacion', type: 'video', status: 'scheduled', scheduledAt: new Date('2026-11-02T17:00:00Z') } });
+  await db.contentPost.create({ data: { userId, platform: 'youtube', title: 'Motor por dentro', type: 'video', status: 'published', publishedAt: new Date('2026-10-02T17:00:00Z'), views: 1500, likes: 90, comments: 12, shares: 4 } });
+  await db.competitor.create({ data: { userId, platform: 'youtube', name: 'Canal Aviación', handle: 'aviacion', url: 'https://www.youtube.com/@aviacion', snapshots: { create: [{ date: noon('2026-09-01'), followers: 1000 }, { date: noon('2026-10-01'), followers: 1200, avgViews: 300 }] } } });
   await db.automation.create({ data: { userId, name: 'Atrasadas', triggerType: 'task_overdue', actionType: 'notify', enabled: true } });
   const conv = await db.aIConversation.create({ data: { userId, title: 'Hola' } });
   await db.aIMessage.createMany({ data: [{ conversationId: conv.id, role: 'user', content: 'hola' }, { conversationId: conv.id, role: 'tool', content: '{"x":1}' }, { conversationId: conv.id, role: 'assistant', content: 'buenas' }] });
@@ -68,7 +70,8 @@ describe('exportar', () => {
     expect(out.conversations![0]!.messages!.map((m) => m.role)).toEqual(['user', 'assistant']); // sin mensajes de herramienta
     expect(out.bankAccounts![0]!.transactions).toHaveLength(2);
     expect(out.auditLog).toHaveLength(1);
-    expect(out.contentPosts).toMatchObject([{ title: 'Hangar', status: 'scheduled', scheduledAt: '2026-11-02T17:00:00.000Z' }]);
+    expect(out.contentPosts).toMatchObject([{ title: 'Hangar', status: 'scheduled', scheduledAt: '2026-11-02T17:00:00.000Z' }, { platform: 'youtube', views: 1500, shares: 4 }]);
+    expect(out.competitors).toMatchObject([{ name: 'Canal Aviación', snapshots: [{ followers: 1000 }, { followers: 1200, avgViews: 300 }] }]);
   });
   it('los calendarios suscritos no se exportan (se resincronizan) y las cuentas ajenas compartidas tampoco', async () => {
     const acct = await db.account.create({ data: { userId: alice, provider: 'ics', kind: 'calendar', externalId: 'x', accessTokenEnc: 'u' } });
@@ -150,8 +153,9 @@ describe('eliminar datos y cuenta', () => {
     await deleteUserData(alice, PW);
     expect(await db.user.findUnique({ where: { id: alice } })).not.toBeNull();
     expect(await db.session.count({ where: { userId: alice } })).toBe(1); // la sesión se conserva
-    for (const n of [await db.task.count({ where: { userId: alice } }), await db.bankAccount.count({ where: { ownerId: alice } }), await db.transaction.count({ where: { userId: alice } }), await db.event.count({ where: { calendar: { userId: alice } } }), await db.trip.count({ where: { userId: alice } }), await db.account.count({ where: { userId: alice } }), await db.aIMessage.count({ where: { conversation: { userId: alice } } }), await db.auditLog.count({ where: { userId: alice } }), await db.contentPost.count({ where: { userId: alice } })]) expect(n).toBe(0);
-    expect(await db.contentPost.count({ where: { userId: bob } })).toBe(1);
+    for (const n of [await db.task.count({ where: { userId: alice } }), await db.bankAccount.count({ where: { ownerId: alice } }), await db.transaction.count({ where: { userId: alice } }), await db.event.count({ where: { calendar: { userId: alice } } }), await db.trip.count({ where: { userId: alice } }), await db.account.count({ where: { userId: alice } }), await db.aIMessage.count({ where: { conversation: { userId: alice } } }), await db.auditLog.count({ where: { userId: alice } }), await db.contentPost.count({ where: { userId: alice } }), await db.competitor.count({ where: { userId: alice } })]) expect(n).toBe(0);
+    expect(await db.contentPost.count({ where: { userId: bob } })).toBe(2);
+    expect(await db.competitorSnapshot.count({ where: { competitor: { userId: bob } } })).toBe(2);
     expect(await db.task.count({ where: { userId: bob } })).toBe(2); // Bob intacto
     expect(await db.transaction.count({ where: { userId: bob } })).toBe(2);
   });

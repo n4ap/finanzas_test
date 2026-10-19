@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CAPTION_MAX, POST_STATUSES, POST_TYPES } from './content';
+import { CAPTION_MAX, PLATFORMS, POST_STATUSES, POST_TYPES } from './content';
 import { NEWS_CATEGORY_IDS } from './news';
 
 /**
@@ -18,13 +18,14 @@ const money = z.string().regex(/^-?\d{1,10}(\.\d{1,8})?$/, 'Importe no válido')
 const pct = z.string().regex(/^\d{1,3}(\.\d{1,3})?$/, 'Porcentaje no válido');
 const ref = z.string().min(1).max(60);
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const count = z.number().int().min(0).max(2_000_000_000).nullish();
 const arr = <T extends z.ZodType>(t: T, max: number) => z.array(t).max(max).default([]);
 
 export const exportSchema = z.object({
   app: z.literal('life-dashboard'),
   version: z.literal(EXPORT_VERSION),
   exportedAt: iso,
-  profile: z.object({ name: text(80), city: text(80), timezone: text(60), locale: text(10), currency: text(3), theme: z.enum(['light', 'dark', 'system']), followedNews: z.array(z.enum(NEWS_CATEGORY_IDS)).max(10).default([]) }).partial().optional(),
+  profile: z.object({ name: text(80), city: text(80), timezone: text(60), locale: text(10), currency: text(3), theme: z.enum(['light', 'dark', 'system']), followedNews: z.array(z.enum(NEWS_CATEGORY_IDS)).max(10).default([]), contentKeywords: z.array(text(40)).max(20).nullish() }).partial().optional(),
   projects: arr(z.object({ ref, name: text(80), description: optText(500), status: z.enum(['planned', 'active', 'paused', 'done']), priority: z.number().int().min(1).max(3), color, targetDate: optIso }), 200),
   tasks: arr(z.object({ ref, projectRef: ref.nullish(), parentRef: ref.nullish(), title: text(200), description: optText(2000), priority: z.number().int().min(1).max(3), status: z.enum(['inbox', 'next', 'in_progress', 'waiting', 'done']), dueDate: optIso, estimateMinutes: z.number().int().min(1).max(1440).nullish(), tags: z.array(text(30)).max(10).default([]), recurrence: z.enum(['daily', 'weekly', 'monthly']).nullish(), remindAt: optIso, completedAt: optIso }), 50_000),
   calendars: arr(z.object({ name: text(60), color, isDefault: z.boolean().default(false), events: arr(z.object({ title: text(200), description: optText(2000), location: optText(200), startsAt: iso, endsAt: iso, allDay: z.boolean().default(false), attendees: z.array(text(120)).max(30).default([]), important: z.boolean().default(false) }), 20_000) }), 20),
@@ -62,9 +63,14 @@ export const exportSchema = z.object({
     }), 200),
   }).default({ answers: [], goals: [], reviews: [], decisions: [] }),
   contentPosts: arr(z.object({
-    platform: text(20).default('tiktok'), title: text(120), caption: optText(CAPTION_MAX), hashtags: optText(300), type: z.enum(POST_TYPES), status: z.enum(POST_STATUSES),
+    platform: z.enum(PLATFORMS).default('tiktok'), title: text(120), caption: optText(CAPTION_MAX), hashtags: optText(300), type: z.enum(POST_TYPES), status: z.enum(POST_STATUSES),
     scheduledAt: optIso, publishedAt: optIso, notes: optText(1000), createdAt: iso,
+    views: count, likes: count, comments: count, shares: count,
   }), 2000),
+  competitors: arr(z.object({
+    platform: z.enum(PLATFORMS), name: text(80), handle: optText(60), url: optText(300).refine((u) => !u || /^https?:\/\//i.test(u)), notes: optText(1000), mine: z.boolean().default(false),
+    snapshots: arr(z.object({ date: iso, followers: z.number().int().min(0).max(5_000_000_000), avgViews: count, posts: count }), 1000),
+  }), 100),
   /** Solo informativo (historial de cambios financieros): no se importa. */
   auditLog: z.array(z.unknown()).optional(),
 });

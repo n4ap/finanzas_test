@@ -14,7 +14,7 @@ const dec = (d: { toString(): string } | null) => (d == null ? null : d.toString
 
 /** Todos los datos PROPIOS del usuario en un único JSON portable. Sin contraseña, sesiones, claves ni tokens de conexiones. */
 export async function exportUserData(userId: string, now = new Date()): Promise<ExportFileInput> {
-  const [u, projects, tasks, calendars, emails, accounts, budgets, portfolios, workouts, metrics, goals, trips, family, shopping, automations, conversations, audit, coachAnswers, coachGoals, reviews, decisions, contentPosts] = await Promise.all([
+  const [u, projects, tasks, calendars, emails, accounts, budgets, portfolios, workouts, metrics, goals, trips, family, shopping, automations, conversations, audit, coachAnswers, coachGoals, reviews, decisions, contentPosts, competitors] = await Promise.all([
     db.user.findUniqueOrThrow({ where: { id: userId } }),
     db.project.findMany({ where: { userId } }),
     db.task.findMany({ where: { userId } }),
@@ -37,11 +37,12 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
     db.review.findMany({ where: { userId }, orderBy: [{ kind: 'asc' }, { period: 'asc' }] }),
     db.decision.findMany({ where: { userId } }),
     db.contentPost.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    db.competitor.findMany({ where: { userId }, include: { snapshots: { orderBy: { date: 'asc' } } }, orderBy: { createdAt: 'asc' } }),
   ]);
-  const prefs = (u.preferences ?? {}) as { followedNews?: string[] };
+  const prefs = (u.preferences ?? {}) as { followedNews?: string[]; contentKeywords?: string[] };
   return {
     app: 'life-dashboard', version: EXPORT_VERSION, exportedAt: iso(now),
-    profile: { name: u.name, city: u.city, timezone: u.timezone, locale: u.locale, currency: u.currency, theme: u.theme as 'light' | 'dark' | 'system', followedNews: (prefs.followedNews ?? []) as never },
+    profile: { name: u.name, city: u.city, timezone: u.timezone, locale: u.locale, currency: u.currency, theme: u.theme as 'light' | 'dark' | 'system', followedNews: (prefs.followedNews ?? []) as never, contentKeywords: prefs.contentKeywords ?? null },
     projects: projects.map((p) => ({ ref: p.id, name: p.name, description: p.description, status: p.status as 'active', priority: p.priority, color: p.color, targetDate: optIso(p.targetDate) })),
     tasks: tasks.map((t) => ({ ref: t.id, projectRef: t.projectId, parentRef: t.parentId, title: t.title, description: t.description, priority: t.priority, status: t.status as 'next', dueDate: optIso(t.dueDate), estimateMinutes: t.estimateMinutes, tags: t.tags, recurrence: t.recurrence as 'daily' | null, remindAt: optIso(t.remindAt), completedAt: optIso(t.completedAt) })),
     calendars: calendars.map((c) => ({ name: c.name, color: c.color, isDefault: c.isDefault, events: c.events.map((e) => ({ title: e.title, description: e.description, location: e.location, startsAt: iso(e.startsAt), endsAt: iso(e.endsAt), allDay: e.allDay, attendees: e.attendees, important: e.important })) })),
@@ -63,7 +64,8 @@ export async function exportUserData(userId: string, now = new Date()): Promise<
       reviews: reviews.map((r) => ({ kind: r.kind as 'daily', period: r.period, answers: r.answers as Record<string, string>, scores: (r.scores ?? null) as Record<string, number> | null, energy: r.energy, mood: r.mood, stress: r.stress })),
       decisions: decisions.map((x) => ({ title: x.title, objective: x.objective, options: x.options as { name: string }[], impact: x.impact, recommendation: x.recommendation, nextAction: x.nextAction, status: x.status as 'open', chosen: x.chosen })),
     },
-    contentPosts: contentPosts.map((c) => ({ platform: c.platform, title: c.title, caption: c.caption, hashtags: c.hashtags, type: c.type as 'video', status: c.status as 'idea', scheduledAt: optIso(c.scheduledAt), publishedAt: optIso(c.publishedAt), notes: c.notes, createdAt: iso(c.createdAt) })),
+    contentPosts: contentPosts.map((c) => ({ platform: c.platform as 'tiktok', title: c.title, caption: c.caption, hashtags: c.hashtags, type: c.type as 'video', status: c.status as 'idea', scheduledAt: optIso(c.scheduledAt), publishedAt: optIso(c.publishedAt), notes: c.notes, createdAt: iso(c.createdAt), views: c.views, likes: c.likes, comments: c.comments, shares: c.shares })),
+    competitors: competitors.map((c) => ({ platform: c.platform as 'youtube', name: c.name, handle: c.handle, url: c.url, notes: c.notes, mine: c.mine, snapshots: c.snapshots.map((x) => ({ date: iso(x.date), followers: x.followers, avgViews: x.avgViews, posts: x.posts })) })),
     auditLog: audit.map((a) => ({ entity: a.entity, entityId: a.entityId, action: a.action, before: a.before, after: a.after, createdAt: iso(a.createdAt) })),
   };
 }
@@ -178,9 +180,14 @@ export async function importUserData(userId: string, raw: string): Promise<Impor
       bump('decisiones', f.coach.decisions.length);
     }
     if (f.contentPosts.length) {
-      await tx.contentPost.createMany({ data: f.contentPosts.map((c) => ({ userId, platform: c.platform, title: c.title, caption: c.caption ?? null, hashtags: c.hashtags ?? null, type: c.type, status: c.status, scheduledAt: dn(c.scheduledAt), publishedAt: dn(c.publishedAt), notes: c.notes ?? null, createdAt: d(c.createdAt) })) });
+      await tx.contentPost.createMany({ data: f.contentPosts.map((c) => ({ userId, platform: c.platform, title: c.title, caption: c.caption ?? null, hashtags: c.hashtags ?? null, type: c.type, status: c.status, scheduledAt: dn(c.scheduledAt), publishedAt: dn(c.publishedAt), notes: c.notes ?? null, createdAt: d(c.createdAt), views: c.views ?? null, likes: c.likes ?? null, comments: c.comments ?? null, shares: c.shares ?? null })) });
       bump('publicaciones', f.contentPosts.length);
     }
+    for (const c of f.competitors) {
+      const comp = await tx.competitor.create({ data: { userId, platform: c.platform, name: c.name, handle: c.handle ?? null, url: c.url ?? null, notes: c.notes ?? null, mine: c.mine } });
+      if (c.snapshots.length) await tx.competitorSnapshot.createMany({ data: c.snapshots.map((x) => ({ competitorId: comp.id, date: d(x.date), followers: x.followers, avgViews: x.avgViews ?? null, posts: x.posts ?? null })), skipDuplicates: true });
+    }
+    bump('cuentas seguidas', f.competitors.length);
   }, { timeout: 120_000, maxWait: 10_000 });
   } catch (e) {
     if (e instanceof ServiceError) throw e;
@@ -245,6 +252,7 @@ async function wipe(tx: Tx, userId: string) {
   await tx.review.deleteMany({ where: { userId } });
   await tx.decision.deleteMany({ where: { userId } });
   await tx.contentPost.deleteMany({ where: { userId } });
+  await tx.competitor.deleteMany({ where: { userId } }); // sus datos, en cascada
 }
 
 /** Borra TODOS los datos del usuario pero conserva su cuenta, perfil y sesión. Pide la contraseña. */

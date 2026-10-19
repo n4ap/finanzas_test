@@ -9,4 +9,4 @@ export const toNoon = (s: string) => new Date(`${s}T12:00:00.000Z`);
 export const num = (d: { toString(): string } | null | undefined) => (d == null ? null : Number(d.toString()));
 
 /** Límites por usuario/viaje: evitan que un bucle o un cliente malicioso llene la BD. */
-export const LIMITS = { projects: 100, trips: 100, bookings: 60, itinerary: 300, packing: 200, family: 100, shopping: 300, workouts: 5000, contentPosts: 2000 } as const;
+export const LIMITS = { projects: 100, trips: 100, bookings: 60, itinerary: 300, packing: 200, family: 100, shopping: 300, workouts: 5000, contentPosts: 2000, competitors: 100, snapshots: 1000 } as const;

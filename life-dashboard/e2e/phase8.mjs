@@ -1,4 +1,4 @@
-// E2E Fase 8: panel de contenido de TikTok (ideas, borradores, programadas, publicadas y registro de pendientes). Requiere app en marcha y seed fresco.
+// E2E Fase 8: estudio de contenido (YouTube y TikTok, calendario editorial, análisis, competencia y noticias del sector). Requiere app en marcha y seed fresco.
 import { BASE, OUT, check, failures, launch, login } from './helpers.mjs';
 
 const browser = await launch();
@@ -12,13 +12,19 @@ page.on('dialog', (d) => d.accept());
 await login(page);
 const dialog = () => page.locator('[role=dialog]');
 const closed = () => page.waitForSelector('[role=dialog]', { state: 'detached' });
-const tab = (name) => page.click(`[role=tablist][aria-label="Sección de contenido"] [role=tab]:has-text("${name}")`);
-const cards = () => page.locator('main ul > li');
+const tab = (name, pl = 'TikTok') => page.click(`[role=tablist][aria-label="Publicaciones de ${pl}"] [role=tab]:has-text("${name}")`);
+const cards = () => page.locator('main ul.grid > li');
 const pad = (n) => String(n).padStart(2, '0');
 const local = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-check('menú: enlace «TikTok»', (await page.locator('nav a[href="/content"]').count()) >= 1);
+const sections = ['/content/youtube', '/content/tiktok', '/content/calendar', '/content/analytics', '/content/competitors', '/content/news'];
+check('menú lateral: las 6 secciones de contenido', (await Promise.all(sections.map((h) => page.locator(`aside nav a[href="${h}"]`).count()))).every((n) => n === 1));
 await page.goto(`${BASE}/content`);
+await page.waitForURL('**/content/youtube');
+await page.waitForSelector('h1:text-is("YouTube")');
+check('/content lleva a YouTube', true);
+check('estudio: barra de secciones propia con la actual marcada', (await page.locator('nav[aria-label="Estudio de contenido"] a').count()) === 6 && (await page.locator('nav[aria-label="Estudio de contenido"] a[aria-current=page]').textContent()).includes('YouTube'));
+await page.click('nav[aria-label="Estudio de contenido"] a:has-text("TikTok")');
 await page.waitForSelector('h1:text-is("TikTok")');
 check('panel: un único h1 y siempre oscuro', (await page.locator('h1').count()) === 1 && (await page.locator('main .dark h1').count()) === 1);
 check('panel: vacío al principio', (await page.locator('text=No hay publicaciones programadas').count()) === 1);
@@ -108,14 +114,146 @@ check('validación: título vacío muestra error', (await page.locator('[role=di
 await page.keyboard.press('Escape');
 await closed();
 
+// ── YouTube: tipos propios, publicada con resultados
+await page.goto(`${BASE}/content/youtube`);
+await page.waitForSelector('h1:text-is("YouTube")');
+await page.click('button:has-text("Nueva idea")');
+await dialog().waitFor();
+const ytTypes = await page.locator('select[name=type] option').allTextContents();
+check('YouTube: tipos propios (Vídeo, Short, Directo, Comunidad)', ytTypes.join(',') === 'Vídeo,Short,Directo,Comunidad', ytTypes.join(','));
+check('YouTube: descripción hasta 5000', (await dialog().textContent()).includes('0/5000'));
+await page.fill('input[name=title]', 'Así se revisa un motor por dentro');
+await page.selectOption('select[name=type]', 'short');
+await page.selectOption('select[name=status]', 'published');
+check('publicada: aparecen los campos de resultados', (await page.locator('input[name=views]').count()) === 1);
+await page.fill('input[name=views]', '12.500');
+await page.fill('input[name=likes]', '900');
+await page.fill('input[name=comments]', '40');
+await page.fill('input[name=shares]', '60');
+await page.click('[role=dialog] button[type=submit]');
+await closed();
+await tab('Publicadas', 'YouTube');
+await page.waitForSelector('main li:has-text("Así se revisa un motor")');
+check('YouTube: tarjeta con visualizaciones', (await cards().first().textContent()).includes('12.500 visualizaciones'));
+check('YouTube y TikTok separados', (await page.locator('main li:has-text("Carrusel de herramientas")').count()) === 0);
+
+// ── Análisis
+await page.click('nav[aria-label="Estudio de contenido"] a:has-text("Análisis")');
+await page.waitForSelector('h1:text-is("Análisis")');
+const kpis = await page.locator('section[aria-label="Resumen de resultados"]').textContent();
+check('análisis: publicadas, visualizaciones e interacción', /Publicadas2/.test(kpis) && kpis.includes('12,5 mil') && kpis.includes('8 %'), kpis);
+check('análisis: gráficos con tabla alternativa', (await page.locator('main section:has(h3) button:has-text("Ver tabla")').count()) === 4);
+const bars = await page.locator('ul[aria-label="Media de visualizaciones por día de la semana"] li').count();
+check('análisis: por día solo los días con datos', bars === 1, String(bars));
+check('análisis: ranking de lo mejor', (await page.locator('[aria-labelledby=top-title] li').count()) === 1);
+await page.click('[role=tablist][aria-label=Plataforma] [role=tab]:has-text("TikTok")');
+await page.waitForFunction(() => /Publicadas1/.test(document.querySelector('section[aria-label="Resumen de resultados"]')?.textContent ?? ''));
+check('análisis: filtro por plataforma', true);
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/p8-analisis.png`, fullPage: true });
+
+// ── Calendario editorial
+await page.click('nav[aria-label="Estudio de contenido"] a:has-text("Calendario editorial")');
+await page.waitForSelector('h1:text-is("Calendario editorial")');
+const grid = page.locator('[role=grid]');
+check('calendario: cuadrícula del mes con lo programado', (await grid.locator('button:has-text("Un día en el hangar")').count()) === 1);
+check('calendario: lo publicado de ambas plataformas', (await grid.locator('button:has-text("Así se revisa un motor")').count()) === 1 && (await grid.locator('button:has-text("Carrusel de herramientas")').count()) === 1);
+await page.click('[role=tablist][aria-label=Plataforma] [role=tab]:has-text("YouTube")');
+await page.waitForFunction(() => !document.querySelector('[role=grid]')?.textContent?.includes('Un día en el hangar'));
+check('calendario: filtro por plataforma', true);
+await page.click('[role=tablist][aria-label=Plataforma] [role=tab]:has-text("Todas")');
+const target = new Date(Date.now() + 2 * 86_400_000);
+const targetKey = `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}`;
+const monthNow = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}`;
+if (targetKey.slice(0, 7) !== monthNow) { await page.click('a[aria-label="Mes siguiente"]'); await page.waitForURL('**/content/calendar?m=*'); }
+await page.locator(`[role=gridcell] button[aria-label^="Añadir el"]`).nth(0).waitFor({ state: 'attached' });
+const addBtn = page.locator(`[role=gridcell][aria-label="${await page.evaluate((k) => new Date(`${k}T12:00:00Z`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }), targetKey)}"] button[aria-label^="Añadir"]`);
+await addBtn.focus();
+await addBtn.click();
+await dialog().waitFor();
+check('calendario: «+» abre una idea con plataforma a elegir y la fecha del día', (await page.locator('select[name=platform]').count()) === 1 && (await page.inputValue('input[name=scheduledAt]')).startsWith(targetKey));
+await page.selectOption('select[name=platform]', 'tiktok');
+check('al cambiar de plataforma cambian los tipos', (await page.locator('select[name=type] option').allTextContents()).includes('Carrusel'));
+await page.fill('input[name=title]', 'Grabación en pista');
+await page.selectOption('select[name=status]', 'scheduled');
+await page.click('[role=dialog] button[type=submit]');
+await closed();
+await grid.locator('button:has-text("Grabación en pista")').waitFor();
+check('calendario: la nueva aparece en su día', true);
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/p8-calendario.png`, fullPage: true });
+
+// ── Competencia
+await page.click('nav[aria-label="Estudio de contenido"] a:has-text("Competencia")');
+await page.waitForSelector('h1:text-is("Competencia")');
+check('competencia: vacía al principio', (await page.locator('text=Aún no sigues ninguna cuenta').count()) === 1);
+const follow = async (name, platform, mine = false) => {
+  await page.click('button:has-text("Seguir cuenta")');
+  await dialog().waitFor();
+  await page.selectOption('select[name=platform]', platform);
+  await page.fill('input[name=name]', name);
+  await page.fill('input[name=handle]', `@${name.toLowerCase().replace(/\s/g, '')}`);
+  await page.fill('input[name=url]', 'https://www.youtube.com/@canal');
+  if (mine) await page.check('input[name=mine]');
+  await page.click('[role=dialog] button[type=submit]');
+  await closed();
+  await page.waitForSelector(`main li:has-text("${name}")`);
+};
+await follow('Hangar Pro', 'youtube');
+await follow('Mi canal', 'youtube', true);
+const logData = async (name, date, followers, avg = '') => {
+  await page.click(`main li:has-text("${name}") button:has-text("Anotar datos")`);
+  await dialog().waitFor();
+  await page.fill('input[name=date]', date);
+  await page.fill('input[name=followers]', followers);
+  if (avg) await page.fill('input[name=avgViews]', avg);
+  await page.click('[role=dialog] button[type=submit]');
+  await closed();
+};
+const day = (n) => { const d = new Date(Date.now() - n * 86_400_000); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+await logData('Hangar Pro', day(30), '10.000');
+await logData('Hangar Pro', day(0), '11.500', '4000');
+await logData('Mi canal', day(0), '800');
+await page.waitForSelector('main li:has-text("Hangar Pro"):has-text("11.500")');
+const hp = await page.locator('main li:has-text("Hangar Pro")').textContent();
+check('competencia: último dato y crecimiento en ~30 días', /\+1\.?500 \(\+15 %\)/.test(hp), hp);
+check('competencia: «Tú» en tu cuenta', (await page.locator('main li:has-text("Mi canal") >> text=Tú').count()) === 1);
+check('competencia: comparativa ordenada por seguidores', /Hangar Pro[\s\S]*Mi canal/.test(await page.locator('[aria-labelledby=rank-title]').textContent()));
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${OUT}/p8-competencia.png`, fullPage: true });
+
+// ── Noticias del sector
+await page.click('nav[aria-label="Estudio de contenido"] a:has-text("Noticias del sector")');
+await page.waitForSelector('h1:text-is("Noticias del sector")');
+check('noticias: palabras clave por defecto', (await page.locator('section[aria-label="Palabras clave"] li').count()) === 5);
+await page.fill('input[aria-label="Nueva palabra clave"]', 'Inflación');
+await page.click('section[aria-label="Palabras clave"] button:has-text("Añadir")');
+await page.waitForSelector('main li:has-text("La inflación en España se modera")');
+check('noticias: aparece la noticia que coincide (sin tildes ni mayúsculas)', (await page.locator('main ul.grid > li').count()) === 1);
+await page.click('main li:has-text("La inflación en España") button:has-text("Convertir en idea")');
+await dialog().waitFor();
+check('noticias: la idea llega con el título y la fuente en notas', (await page.inputValue('input[name=title]')).startsWith('La inflación en España') && (await page.inputValue('textarea[name=notes]')).includes('https://example.com/noticia/'));
+await page.click('[role=dialog] button[type=submit]');
+await closed();
+await page.click('section[aria-label="Palabras clave"] button[aria-label="Quitar «Inflación»"]');
+await page.waitForSelector('text=Ninguna noticia reciente sobre tus temas');
+check('noticias: quitar la palabra clave la deja de mostrar', true);
+await page.goto(`${BASE}/content/youtube`);
+await tab('Borradores', 'YouTube');
+await page.waitForSelector('main li:has-text("La inflación en España")');
+check('noticias: la idea queda en los borradores de YouTube', true);
+
 // ── Móvil
-const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, timezoneId: 'Europe/Madrid' });
 const mp = await m.newPage();
 await login(mp);
-await mp.goto(`${BASE}/content`);
-await mp.waitForSelector('h1:text-is("TikTok")');
-check('móvil: sin desplazamiento horizontal', await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-check('móvil: las pestañas no se salen del panel', await mp.evaluate(() => { const t = document.querySelector('[aria-label="Sección de contenido"]').parentElement.getBoundingClientRect(), d = document.querySelector('main .dark').getBoundingClientRect(); return t.right <= d.right; }));
+for (const h of sections) {
+  await mp.goto(`${BASE}${h}`);
+  await mp.waitForSelector('main h1');
+  check(`móvil ${h}: sin desplazamiento horizontal`, await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+}
+await mp.goto(`${BASE}/content/calendar`);
+check('móvil: el calendario se ve como agenda', await mp.locator('ol[aria-label^="Agenda"]').isVisible() && !(await mp.locator('[role=grid]').isVisible()));
 await mp.screenshot({ path: `${OUT}/p8-movil.png`, fullPage: true });
 
 check('sin errores de consola ni excepciones', errors.length === 0, errors.slice(0, 3).join(' | '));
