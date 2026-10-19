@@ -1,0 +1,8 @@
+node_modules
+.next
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+# Copias de seguridad automáticas: contienen tus datos personales
+backups/

@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest';
+import { buildPriorities, detectConflicts, recommendNextAction, unusualSpending, type EventLite, type TaskLite } from './insights';
+
+const now = new Date(2026, 9, 4, 10, 0);
+const at = (h: number, m = 0, dayOffset = 0) => new Date(2026, 9, 4 + dayOffset, h, m);
+const task = (o: Partial<TaskLite> & { id: string }): TaskLite => ({ title: o.id, priority: 2, status: 'next', dueDate: null, estimateMinutes: 30, ...o });
+const ev = (id: string, s: Date, e: Date, o: Partial<EventLite> = {}): EventLite => ({ id, title: id, startsAt: s, endsAt: e, ...o });
+
+describe('detectConflicts', () => {
+  it('detecta solapes y no cuenta eventos consecutivos', () => {
+    const c = detectConflicts([ev('a', at(10), at(11)), ev('b', at(10, 30), at(12)), ev('c', at(12), at(13))]);
+    expect(c.map(([x, y]) => x.id + y.id)).toEqual(['ab']);
+  });
+});
+
+describe('unusualSpending', () => {
+  it('marca categorías muy por encima de la media', () => {
+    const spend = [
+      { category: 'ocio', amount: -300, date: new Date(2026, 9, 2) },
+      { category: 'ocio', amount: -60, date: new Date(2026, 8, 2) },
+      { category: 'ocio', amount: -60, date: new Date(2026, 7, 2) },
+      { category: 'ocio', amount: -60, date: new Date(2026, 6, 2) },
+      { category: 'vivienda', amount: -800, date: new Date(2026, 9, 1) },
+      { category: 'vivienda', amount: -800, date: new Date(2026, 8, 1) },
+    ];
+    expect(unusualSpending(spend, now).map((u) => u.category)).toEqual(['ocio']);
+  });
+});
+
+describe('recommendNextAction', () => {
+  it('elige la tarea atrasada que cabe en el hueco', () => {
+    const tasks = [
+      task({ id: 'larga', priority: 1, estimateMinutes: 120 }),
+      task({ id: 'atrasada', priority: 2, dueDate: at(9, 0, -2), estimateMinutes: 40 }),
+    ];
+    const r = recommendNextAction({ now, tasks, events: [ev('reunion', at(10, 45), at(11, 30))] });
+    expect(r.taskId).toBe('atrasada');
+    expect(r.message).toContain('45 minutos');
+  });
+  it('habla de bloque largo si el hueco supera 3 h y pluraliza bien', () => {
+    const r = recommendNextAction({ now, tasks: [task({ id: 'x' })], events: [ev('manana', at(10, 0, 1), at(11, 0, 1))] });
+    expect(r.message).toContain('bloque largo');
+    const p = buildPriorities({ now, tasks: [task({ id: 'y', dueDate: at(9, 0, -1) })], emails: [], events: [], upcomingPayments: [], spend: [] });
+    expect(p[0]?.detail).toBe('Atrasada 1 día');
+  });
+  it('informa si estás en un evento', () => {
+    expect(recommendNextAction({ now, tasks: [], events: [ev('x', at(9, 30), at(10, 30))] }).kind).toBe('event');
+  });
+  it('sugiere descanso sin tareas', () => {
+    expect(recommendNextAction({ now, tasks: [], events: [] }).kind).toBe('rest');
+  });
+});
+
+describe('buildPriorities', () => {
+  it('ordena urgentes primero e incluye tareas atrasadas y pagos próximos', () => {
+    const items = buildPriorities({
+      now,
+      tasks: [task({ id: 't1', dueDate: at(9, 0, -1) })],
+      emails: [{ id: 'e1', subject: 'Contrato', fromName: 'Ana', needsReply: true, replied: false, deadline: at(9, 0, 5), important: true }],
+      events: [],
+      upcomingPayments: [{ id: 'p1', description: 'Seguro', amount: -120, date: at(9, 0, 1) }],
+      spend: [],
+    });
+    expect(items[0]?.severity).toBe('urgent');
+    expect(items.map((i) => i.kind)).toEqual(expect.arrayContaining(['task', 'payment', 'email']));
+  });
+
+  it('avisa de presupuestos superados (importante) y casi agotados (aviso), ignorando los que van bien', () => {
+    const items = buildPriorities({
+      now, tasks: [], emails: [], events: [], upcomingPayments: [], spend: [],
+      budgets: [{ category: 'ocio', budget: 200, spent: 250, status: 'over' }, { category: 'compras', budget: 100, spent: 85, status: 'warn' }, { category: 'viajes', budget: 100, spent: 10, status: 'ok' }],
+    });
+    expect(items.map((i) => [i.id, i.severity])).toEqual([['budget-ocio', 'important'], ['budget-compras', 'info']]);
+    expect(items[0]!.href).toBe('/finance?tab=presupuestos');
+  });
+});
+
+describe('buildPriorities: proyectos, familia y viajes', () => {
+  const base = { now, tasks: [], emails: [], events: [], upcomingPayments: [], spend: [] };
+  it('avisa de proyectos fuera de plazo/en riesgo, cumpleaños próximos y maletas pendientes', () => {
+    const items = buildPriorities({
+      ...base,
+      projects: [{ id: 'p1', name: 'Reforma', health: 'late', reason: 'Fecha vencida' }, { id: 'p2', name: 'Web', health: 'at_risk', reason: '1 tarea atrasada' }, { id: 'p3', name: 'OK', health: 'on_track', reason: '' }],
+      birthdays: [{ id: 'b1', name: 'Mamá', daysUntil: 1, turning: 60 }, { id: 'b2', name: 'Lejos', daysUntil: 30, turning: 5 }],
+      trips: [{ id: 't1', name: 'Lisboa', daysUntil: 2, packingPending: 3, packingTotal: 6 }, { id: 't2', name: 'Lejano', daysUntil: 40, packingPending: 5, packingTotal: 5 }, { id: 't3', name: 'Listo', daysUntil: 1, packingPending: 0, packingTotal: 4 }],
+    });
+    expect(items.map((i) => [i.id, i.severity])).toEqual([['project-p1', 'important'], ['birthday-b1', 'important'], ['trip-t1', 'important'], ['project-p2', 'info']]);
+    expect(items.find((i) => i.id === 'birthday-b1')?.detail).toBe('Mañana · cumple 60');
+  });
+});
+
